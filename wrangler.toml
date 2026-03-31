@@ -1,0 +1,8 @@
+name = "webhealthreport"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "webhealthreport"
+database_id = "c379e50c-5790-46da-88fa-83c5b82ebeb0"
