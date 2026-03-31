@@ -5,3 +5,5 @@ dist/
 *.local
 .claude/
 .mcp.json
+test-results/
+playwright-report/

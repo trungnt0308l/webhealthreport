@@ -254,22 +254,33 @@ async function finalize(env, scan, scanId) {
 }
 
 async function buildProgressResponse(env, scan) {
-  const [recent, errorRow] = await Promise.all([
+  const [recent, errorData] = await Promise.all([
     env.DB.prepare(
       `SELECT target_url, target_type, response_status, response_ms FROM link_checks
        WHERE scan_id = ? ORDER BY id DESC LIMIT 20`
     ).bind(scan.id).all(),
-    // Live error count during scan; overridden by issues_found once complete
+    // During scan: fetch live errors list + count; after complete use issues_found
     scan.status === 'complete'
       ? Promise.resolve(null)
       : env.DB.prepare(
-          `SELECT COUNT(*) as cnt FROM link_checks WHERE scan_id = ? AND response_status >= 400`
-        ).bind(scan.id).first(),
+          `SELECT target_url, target_type, response_status, source_url FROM link_checks
+           WHERE scan_id = ? AND response_status >= 400
+           ORDER BY id DESC LIMIT 50`
+        ).bind(scan.id).all(),
   ]);
 
   const errorsFound = scan.status === 'complete'
     ? (scan.issues_found || 0)
-    : (errorRow?.cnt || 0);
+    : (errorData?.results?.length || 0);
+
+  const liveErrors = scan.status !== 'complete'
+    ? (errorData?.results || []).map(r => ({
+        url: r.target_url,
+        type: r.target_type,
+        status: r.response_status,
+        sourceUrl: r.source_url,
+      }))
+    : [];
 
   return {
     scanId: scan.id,
@@ -287,5 +298,6 @@ async function buildProgressResponse(env, scan) {
       status: r.response_status,
       ms: r.response_ms,
     })),
+    liveErrors,
   };
 }

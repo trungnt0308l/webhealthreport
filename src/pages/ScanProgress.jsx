@@ -94,6 +94,7 @@ export default function ScanProgress() {
   const stepIdx = stepIndex(currentStep);
   const progress = status?.status === 'complete' ? 100 : Math.round((stepIdx / (STEPS.length - 1)) * 90);
   const recentChecks = status?.recentChecks || [];
+  const liveErrors = status?.liveErrors || [];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -157,6 +158,29 @@ export default function ScanProgress() {
                   </div>
                 </div>
               </div>
+
+              {/* Live errors panel */}
+              {liveErrors.length > 0 && (
+                <div className="card border-red-200 bg-red-50">
+                  <div className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-3">
+                    Errors found ({liveErrors.length})
+                  </div>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {liveErrors.map((e, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs font-mono">
+                        <span className="font-bold w-8 shrink-0 text-red-500">{e.status}</span>
+                        <span className="text-slate-400 w-7 shrink-0">{typeLabel(e.type)}</span>
+                        <span className="text-slate-700 truncate flex-1" title={e.url}>{shortUrl(e.url)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {liveErrors.length > 0 && liveErrors[0].sourceUrl && (
+                    <div className="mt-2 pt-2 border-t border-red-200 text-xs text-red-400">
+                      Most recent found on: <span className="font-mono text-red-600">{shortUrl(liveErrors[0].sourceUrl)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Live URL feed */}
               {recentChecks.length > 0 && (
