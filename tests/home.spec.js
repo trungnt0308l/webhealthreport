@@ -40,7 +40,7 @@ test.describe('Home page', () => {
   });
 
   test('renders footer text', async ({ page }) => {
-    await expect(page.locator('footer')).toContainText('checks up to 50 pages per scan');
+    await expect(page.locator('footer')).toContainText('checks up to 1,000 pages per scan');
   });
 
   test('shows error when API call fails', async ({ page }) => {

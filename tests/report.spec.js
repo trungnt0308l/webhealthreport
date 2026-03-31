@@ -30,7 +30,7 @@ const MOCK_REPORT = {
       severity: 'important',
       title: 'Missing page titles',
       explanation: 'Pages without titles hurt SEO.',
-      recommendedAction: 'Add unique <title> tags to each page.',
+      recommendedAction: 'Add unique title tags to each page.',
       affectedCount: 1,
       type: 'missing_title',
       example: { url: 'https://example.com/about', sources: [] },
@@ -76,28 +76,60 @@ test.describe('Report page', () => {
   });
 
   test('shows issue severity counts', async ({ page }) => {
-    // The summary grid shows uppercase labels below each count
-    await expect(page.locator('.uppercase').getByText('Critical')).toBeVisible();
-    await expect(page.locator('.uppercase').getByText('Important')).toBeVisible();
-    await expect(page.locator('.uppercase').getByText('Minor')).toBeVisible();
+    // Summary count cards at top of page
+    const grid = page.locator('.grid.grid-cols-3');
+    await expect(grid.getByText('Critical')).toBeVisible();
+    await expect(grid.getByText('Important')).toBeVisible();
+    await expect(grid.getByText('Minor')).toBeVisible();
   });
 
-  test('critical issues section is open by default', async ({ page }) => {
+  test('all issue titles visible without clicking', async ({ page }) => {
     await expect(page.getByText('Broken internal links')).toBeVisible();
+    await expect(page.getByText('Missing page titles')).toBeVisible();
+    await expect(page.getByText('Slow external link')).toBeVisible();
   });
 
-  test('can expand issue details', async ({ page }) => {
-    await page.getByRole('button', { name: /Details/i }).first().click();
+  test('all issue explanations visible without clicking', async ({ page }) => {
     await expect(page.getByText('Some pages return 404.')).toBeVisible();
-    await expect(page.getByText('Fix or redirect the broken URLs.')).toBeVisible();
+    await expect(page.getByText('Pages without titles hurt SEO.')).toBeVisible();
+    await expect(page.getByText('An external link responded slowly.')).toBeVisible();
   });
 
-  test('can collapse expanded issue', async ({ page }) => {
-    const btn = page.getByRole('button', { name: /Details/i }).first();
-    await btn.click();
-    await expect(page.getByText('Some pages return 404.')).toBeVisible();
-    await page.getByRole('button', { name: /Less/i }).first().click();
-    await expect(page.getByText('Some pages return 404.')).not.toBeVisible();
+  test('all recommended actions visible without clicking', async ({ page }) => {
+    await expect(page.getByRole('cell', { name: 'Fix or redirect the broken URLs.' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Monitor or replace the link.' })).toBeVisible();
+  });
+
+  test('shows table column headers', async ({ page }) => {
+    const table = page.locator('table').first();
+    await expect(table.getByText('Severity')).toBeVisible();
+    await expect(table.getByText('Issue')).toBeVisible();
+    await expect(table.getByText('What to do')).toBeVisible();
+    await expect(table.getByRole('columnheader', { name: 'URL' })).toBeVisible();
+  });
+
+  test('shows severity group header rows', async ({ page }) => {
+    await expect(page.getByText('Critical (1)')).toBeVisible();
+    await expect(page.getByText('Important (1)')).toBeVisible();
+    await expect(page.getByText('Minor (1)')).toBeVisible();
+  });
+
+  test('shows example URL for issue', async ({ page }) => {
+    await expect(page.getByText(/example\.com\/missing/)).toBeVisible();
+  });
+
+  test('clicking URL copies to clipboard and shows Copied!', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const urlBtn = page.getByTitle('https://example.com/missing');
+    await urlBtn.click();
+    await expect(urlBtn.getByText('✓ Copied!')).toBeVisible();
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clip).toBe('https://example.com/missing');
+  });
+
+  test('shows source URL under example URL', async ({ page }) => {
+    // i3 has sources: ['https://example.com/contact']
+    await expect(page.getByText(/Found on:.*example\.com\/contact/)).toBeVisible();
   });
 
   test('pages crawled section expands on click', async ({ page }) => {
@@ -124,7 +156,6 @@ test.describe('Report page', () => {
   });
 
   test('shows loading state before report loads', async ({ page }) => {
-    // Navigate without the route mock to see loading state briefly
     await page.route(`/api/scans/loading-test/report`, async route => {
       await new Promise(r => setTimeout(r, 500));
       route.fulfill({ status: 200, body: JSON.stringify(MOCK_REPORT) });

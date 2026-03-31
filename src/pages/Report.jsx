@@ -1,13 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getScanReport } from '../lib/api.js';
-import { scoreColor, scoreBgColor, severityBadgeClass, severityBorderClass, gradeDescription } from '../lib/format.js';
+import { scoreColor, scoreBgColor, severityBadgeClass, gradeDescription } from '../lib/format.js';
 
 function statusCodeColor(code) {
   if (!code) return 'text-slate-400';
   if (code < 300) return 'text-green-600';
   if (code < 400) return 'text-amber-500';
   return 'text-red-500';
+}
+
+function shortUrl(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    const full = u.hostname + u.pathname;
+    return full.length > 60 ? full.slice(0, 60) + '…' : full;
+  } catch {
+    return url.length > 60 ? url.slice(0, 60) + '…' : url;
+  }
 }
 
 function PagesTable({ pages }) {
@@ -51,77 +62,109 @@ function PagesTable({ pages }) {
   );
 }
 
-function IssueCard({ issue }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`border-l-4 ${severityBorderClass(issue.severity)} bg-white rounded-r-lg border border-l-4 border-slate-200 p-4 mb-3`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={severityBadgeClass(issue.severity)}>{issue.severity}</span>
-            {issue.affectedCount > 1 && (
-              <span className="text-xs text-slate-400">{issue.affectedCount} affected</span>
-            )}
-          </div>
-          <div className="font-medium text-slate-800 text-sm">{issue.title}</div>
-          {open && (
-            <div className="mt-3 space-y-2">
-              <p className="text-sm text-slate-600">{issue.explanation}</p>
-              <div className="bg-brand-50 rounded-lg p-3">
-                <span className="text-xs font-semibold text-brand-700 uppercase tracking-wide">What to do</span>
-                <p className="text-sm text-slate-700 mt-1">{issue.recommendedAction}</p>
-              </div>
-              {issue.example && (issue.example.target || issue.example.url) && (
-                <div className="space-y-1">
-                  <div className="text-xs font-medium text-slate-500">URL</div>
-                  <div className="bg-slate-50 rounded px-3 py-2 text-xs font-mono text-slate-700 break-all select-all">
-                    {issue.example.target || issue.example.url}
-                  </div>
-                  {issue.example.anchorText && (
-                    <div className="text-xs text-slate-400">
-                      {issue.type === 'broken_image' ? 'Alt text: ' : 'Link text: '}
-                      <span className="text-slate-600 font-medium">"{issue.example.anchorText}"</span>
-                    </div>
-                  )}
-                </div>
-              )}
-              {issue.example && issue.example.sources && issue.example.sources.length > 0 && (
-                <div className="space-y-1">
-                  <div className="text-xs font-medium text-slate-500">Found on</div>
-                  {issue.example.sources.map((src, i) => (
-                    <div key={i} className="bg-slate-50 rounded px-3 py-2 text-xs font-mono text-slate-500 break-all select-all">
-                      {src}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <button
-          onClick={() => setOpen(v => !v)}
-          className="text-slate-400 hover:text-slate-600 text-xs shrink-0 mt-0.5"
-        >
-          {open ? 'Less ▲' : 'Details ▼'}
-        </button>
-      </div>
-    </div>
-  );
-}
+function IssueTable({ issues }) {
+  const [copiedId, setCopiedId] = useState(null);
 
-function IssueSection({ title, issues, defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen);
-  if (issues.length === 0) return null;
+  function copyUrl(id, url) {
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
+  }
+
+  const groups = [
+    { label: 'Critical', items: issues.filter(i => i.severity === 'critical') },
+    { label: 'Important', items: issues.filter(i => i.severity === 'important') },
+    { label: 'Minor', items: issues.filter(i => i.severity === 'minor') },
+  ].filter(g => g.items.length > 0);
+
   return (
-    <div className="mb-6">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="flex items-center justify-between w-full text-left mb-3"
-      >
-        <h3 className="font-semibold text-slate-800">{title} <span className="text-slate-400 font-normal">({issues.length})</span></h3>
-        <span className="text-slate-400 text-sm">{open ? '▲' : '▼'}</span>
-      </button>
-      {open && issues.map(issue => <IssueCard key={issue.id} issue={issue} />)}
+    <div className="mb-8">
+      <h2 className="text-lg font-bold text-slate-800 mb-4">Issues found</h2>
+      <div className="card p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-24">Severity</th>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium">Issue</th>
+              <th className="text-center px-4 py-2.5 text-slate-500 font-medium w-16">#</th>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium hidden sm:table-cell w-64">What to do</th>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-56">URL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map(({ label, items }) => (
+              <>
+                <tr key={label} className="bg-slate-50 border-y border-slate-200">
+                  <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    {label} ({items.length})
+                  </td>
+                </tr>
+                {items.map(issue => {
+                  const exUrl = issue.example?.target || issue.example?.url || null;
+                  const source = issue.example?.sources?.[0] || null;
+                  const anchor = issue.example?.anchorText || null;
+                  const isCopied = copiedId === issue.id;
+                  return (
+                    <tr key={issue.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 align-top">
+                      {/* Severity */}
+                      <td className="px-4 py-3">
+                        <span className={severityBadgeClass(issue.severity)}>{issue.severity}</span>
+                      </td>
+
+                      {/* Issue title + explanation */}
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-800">{issue.title}</div>
+                        <div className="text-xs text-slate-500 mt-0.5 leading-snug">{issue.explanation}</div>
+                        {/* On small screens, show "What to do" inline */}
+                        <div className="sm:hidden text-xs text-brand-700 mt-1.5 leading-snug">
+                          <span className="font-semibold">Fix: </span>{issue.recommendedAction}
+                        </div>
+                      </td>
+
+                      {/* Affected count */}
+                      <td className="px-4 py-3 text-center font-semibold text-slate-700">
+                        {issue.affectedCount}
+                      </td>
+
+                      {/* Recommended action — hidden on small screens */}
+                      <td className="px-4 py-3 text-xs text-slate-600 leading-snug hidden sm:table-cell">
+                        {issue.recommendedAction}
+                      </td>
+
+                      {/* URL — click to copy */}
+                      <td className="px-4 py-3">
+                        {exUrl ? (
+                          <button
+                            onClick={() => copyUrl(issue.id, exUrl)}
+                            title={exUrl}
+                            className="text-left w-full group"
+                          >
+                            <span className={`block font-mono text-xs break-all leading-snug ${isCopied ? 'text-green-600' : 'text-slate-600 group-hover:text-brand-600'}`}>
+                              {isCopied ? '✓ Copied!' : shortUrl(exUrl)}
+                            </span>
+                            {!isCopied && anchor && (
+                              <span className="block text-xs italic text-slate-400 mt-0.5 truncate">"{anchor}"</span>
+                            )}
+                            {!isCopied && source && (
+                              <span className="block text-xs text-slate-400 mt-0.5 truncate" title={source}>
+                                Found on: {shortUrl(source)}
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -159,9 +202,6 @@ export default function Report() {
     );
   }
 
-  const critical = report.issues.filter(i => i.severity === 'critical');
-  const important = report.issues.filter(i => i.severity === 'important');
-  const minor = report.issues.filter(i => i.severity === 'minor');
   const scanDate = report.scannedAt
     ? new Date(report.scannedAt * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
     : '';
@@ -169,7 +209,7 @@ export default function Report() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-brand-600 rounded-md flex items-center justify-center text-white font-bold text-sm">W</div>
             <span className="font-semibold text-slate-800">Website Health Report</span>
@@ -178,7 +218,7 @@ export default function Report() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-10">
+      <main className="max-w-4xl mx-auto px-6 py-10">
         {/* Report header */}
         <div className="mb-2 text-sm text-slate-400">{scanDate}</div>
         <h1 className="text-2xl font-bold text-slate-900 mb-1 break-all">{report.baseDomain}</h1>
@@ -223,17 +263,10 @@ export default function Report() {
           </div>
         )}
 
-        {/* Issues */}
-        {report.totalIssues > 0 && (
-          <div className="mb-8">
-            <h2 className="text-lg font-bold text-slate-800 mb-4">Issues found</h2>
-            <IssueSection title="Critical" issues={critical} defaultOpen={true} />
-            <IssueSection title="Important" issues={important} defaultOpen={critical.length === 0} />
-            <IssueSection title="Minor" issues={minor} defaultOpen={false} />
-          </div>
-        )}
+        {/* Issues table */}
+        {report.totalIssues > 0 && <IssueTable issues={report.issues} />}
 
-        {/* Pages crawled — validation table */}
+        {/* Pages crawled */}
         {report.pages && report.pages.length > 0 && (
           <PagesTable pages={report.pages} />
         )}
