@@ -68,7 +68,7 @@ export default function Home() {
           )}
 
           <p className="mt-4 text-xs text-slate-400">
-            Free scan — no account required. We check up to 50 pages and 200 links.
+            Free scan — no account required. We check up to 1,000 pages and 10,000 links.
           </p>
         </div>
 
@@ -89,7 +89,7 @@ export default function Home() {
       </main>
 
       <footer className="text-center text-xs text-slate-400 py-6 border-t border-slate-100">
-        Website Health Report — checks up to 50 pages per scan
+        Website Health Report — checks up to 1,000 pages per scan
       </footer>
     </div>
   );
