@@ -2,7 +2,7 @@
  * POST /api/scans
  * Creates a new scan, fetches homepage, populates crawl queue.
  */
-import { normalizeUrl, getBaseDomain, parseHtml, isInternalUrl, isHtmlContentType } from '../../_lib/crawl.js';
+import { normalizeUrl, normalizeImageUrl, getBaseDomain, parseHtml, isInternalUrl, isHtmlContentType } from '../../_lib/crawl.js';
 import { fetchPage } from '../../_lib/checker.js';
 
 function nanoid() {
@@ -108,7 +108,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     for (const { src, alt } of images) {
-      const norm = normalizeUrl(src, normalizedStart);
+      const norm = normalizeImageUrl(src, normalizedStart);
       if (!norm || seen.has(norm)) continue;
       seen.add(norm);
       try {

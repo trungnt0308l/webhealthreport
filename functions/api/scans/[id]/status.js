@@ -7,7 +7,7 @@
  * - ALL D1 writes collected first, then a single batchAll at the end
  * - No individual await DB calls inside loops
  */
-import { normalizeUrl, parseHtml, isInternalUrl, isHtmlContentType } from '../../../_lib/crawl.js';
+import { normalizeUrl, normalizeImageUrl, parseHtml, isInternalUrl, isHtmlContentType } from '../../../_lib/crawl.js';
 import { checkBatch, fetchPage } from '../../../_lib/checker.js';
 import { detectIssues } from '../../../_lib/issues.js';
 import { generateReport } from '../../../_lib/report.js';
@@ -168,7 +168,7 @@ export async function onRequestGet({ params, env }) {
         } catch { /* skip */ }
       }
       for (const { src, alt } of r.images) {
-        const norm = normalizeUrl(src, absUrl);
+        const norm = normalizeImageUrl(src, absUrl);
         if (!norm || seen.has(norm)) continue;
         seen.add(norm);
         try {

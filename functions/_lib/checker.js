@@ -7,7 +7,7 @@
  */
 
 const FETCH_TIMEOUT_MS = 8000;
-const USER_AGENT = 'WebHealthReport/1.0 Bot';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
 
 async function doFetch(url, method) {
   const start = Date.now();

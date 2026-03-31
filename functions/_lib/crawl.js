@@ -34,6 +34,30 @@ export function normalizeUrl(urlStr, baseUrl) {
   }
 }
 
+/**
+ * Normalize an image URL for deduplication and queuing.
+ * Strips all query parameters — image health checks don't depend on
+ * per-impression query params (tracking pixels, signed URLs, etc.).
+ * Without this, a tracking pixel like blank.gif?id=abc and blank.gif?id=def
+ * would be treated as distinct URLs and checked multiple times.
+ */
+export function normalizeImageUrl(urlStr, baseUrl) {
+  try {
+    const url = new URL(urlStr, baseUrl);
+    url.hash = '';
+    url.search = '';
+    url.hostname = url.hostname.toLowerCase();
+    if ((url.protocol === 'https:' && url.port === '443') ||
+        (url.protocol === 'http:' && url.port === '80')) {
+      url.port = '';
+    }
+    if (url.pathname === '') url.pathname = '/';
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
 export function getBaseDomain(urlStr) {
   try {
     return new URL(urlStr).hostname.toLowerCase();
