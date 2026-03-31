@@ -70,7 +70,7 @@ echo ""
 
 # 7. Deploy to Cloudflare Pages
 echo "→ Deploying to Cloudflare Pages..."
-wrangler pages deploy dist --project-name=webhealthreport --compatibility-date=2024-09-23
+wrangler pages deploy dist --project-name=webhealthreport --branch=production
 echo ""
 echo "=== Deploy complete! ==="
 echo ""
