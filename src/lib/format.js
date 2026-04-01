@@ -34,3 +34,17 @@ export function gradeDescription(grade) {
   const map = { A: 'Excellent', B: 'Good', C: 'Needs attention', D: 'Poor', F: 'Critical issues' };
   return map[grade] || '';
 }
+
+/**
+ * Shorten a URL for display by removing the protocol and truncating the path.
+ * e.g. "https://www.example.com/very/long/path/to/page?q=1" → "www.example.com/very/long/pa…"
+ */
+export function shortenUrl(url, maxLength = 60) {
+  if (!url) return '';
+  // Remove protocol
+  let short = url.replace(/^https?:\/\//, '');
+  // Remove trailing slash
+  short = short.replace(/\/$/, '');
+  if (short.length <= maxLength) return short;
+  return short.slice(0, maxLength - 1) + '…';
+}

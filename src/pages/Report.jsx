@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getScanReport } from '../lib/api.js';
-import { scoreColor, scoreBgColor, severityBadgeClass, severityBorderClass, gradeDescription } from '../lib/format.js';
+import { scoreColor, scoreBgColor, severityBadgeClass, severityBorderClass, gradeDescription, shortenUrl } from '../lib/format.js';
 
 function statusCodeColor(code) {
   if (!code) return 'text-slate-400';
@@ -38,7 +38,7 @@ function PagesTable({ pages }) {
               {pages.map((p, i) => (
                 <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                   <td className={`px-4 py-2 font-mono font-bold ${statusCodeColor(p.statusCode)}`}>{p.statusCode ?? '?'}</td>
-                  <td className="px-4 py-2 font-mono text-slate-600 break-all max-w-xs">{p.url}</td>
+                  <td className="px-4 py-2 font-mono text-slate-600 max-w-xs truncate" title={p.url}>{shortenUrl(p.url)}</td>
                   <td className="px-4 py-2 text-slate-500 hidden sm:table-cell truncate max-w-xs">{p.title || '—'}</td>
                   <td className="px-4 py-2 text-slate-400 text-right hidden sm:table-cell">{p.responseMs || '—'}</td>
                 </tr>
@@ -74,8 +74,8 @@ function IssueCard({ issue }) {
               {issue.example && (issue.example.target || issue.example.url) && (
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-slate-500">URL</div>
-                  <div className="bg-slate-50 rounded px-3 py-2 text-xs font-mono text-slate-700 break-all select-all">
-                    {issue.example.target || issue.example.url}
+                  <div className="bg-slate-50 rounded px-3 py-2 text-xs font-mono text-slate-700 truncate select-all" title={issue.example.target || issue.example.url}>
+                    {shortenUrl(issue.example.target || issue.example.url, 80)}
                   </div>
                   {issue.example.anchorText && (
                     <div className="text-xs text-slate-400">
@@ -89,8 +89,8 @@ function IssueCard({ issue }) {
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-slate-500">Found on</div>
                   {issue.example.sources.map((src, i) => (
-                    <div key={i} className="bg-slate-50 rounded px-3 py-2 text-xs font-mono text-slate-500 break-all select-all">
-                      {src}
+                    <div key={i} className="bg-slate-50 rounded px-3 py-2 text-xs font-mono text-slate-500 truncate select-all" title={src}>
+                      {shortenUrl(src, 80)}
                     </div>
                   ))}
                 </div>
