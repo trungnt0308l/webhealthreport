@@ -226,13 +226,10 @@ function isHtmlPage(page) {
 }
 
 export function computeHealthScore(issues) {
-  let score = 100;
-  for (const issue of issues) {
-    if (issue.severity === 'critical') score -= 20;
-    else if (issue.severity === 'important') score -= 5;
-    else if (issue.severity === 'minor') score -= 1;
-  }
-  return Math.max(0, score);
+  const criticalPenalty = Math.min(issues.filter(i => i.severity === 'critical').length * 20, 60);
+  const importantPenalty = Math.min(issues.filter(i => i.severity === 'important').length * 5, 25);
+  const minorPenalty = Math.min(issues.filter(i => i.severity === 'minor').length * 1, 10);
+  return Math.max(0, 100 - criticalPenalty - importantPenalty - minorPenalty);
 }
 
 export function scoreGrade(score) {

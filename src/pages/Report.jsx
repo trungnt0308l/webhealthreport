@@ -10,15 +10,37 @@ function statusCodeColor(code) {
   return 'text-red-500';
 }
 
-function shortUrl(url) {
+function shortUrl(url, maxLen = 60) {
   if (!url) return '';
   try {
     const u = new URL(url);
     const full = u.hostname + u.pathname;
-    return full.length > 60 ? full.slice(0, 60) + '…' : full;
+    return full.length > maxLen ? full.slice(0, maxLen) + '…' : full;
   } catch {
-    return url.length > 60 ? url.slice(0, 60) + '…' : url;
+    return url.length > maxLen ? url.slice(0, maxLen) + '…' : url;
   }
+}
+
+const ISSUE_LABELS = {
+  broken_internal_link: 'Broken internal link',
+  broken_external_link: 'Broken external link',
+  broken_image: 'Broken image',
+  redirect_chain: 'Redirect chain',
+  missing_title: 'Missing page title',
+  thin_page: 'Thin page',
+  slow_page: 'Slow page load',
+  homepage_unavailable: 'Homepage unavailable',
+};
+
+function FoundOnCell({ sourceUrl, title }) {
+  if (!sourceUrl) return <span className="text-slate-300">—</span>;
+  const display = title || shortUrl(sourceUrl, 60);
+  return (
+    <a href={sourceUrl} target="_blank" rel="noopener noreferrer"
+       className="text-brand-600 hover:underline text-xs truncate block max-w-xs leading-snug" title={sourceUrl}>
+      {display}
+    </a>
+  );
 }
 
 function PagesTable({ pages }) {
@@ -49,7 +71,7 @@ function PagesTable({ pages }) {
               {pages.map((p, i) => (
                 <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                   <td className={`px-4 py-2 font-mono font-bold ${statusCodeColor(p.statusCode)}`}>{p.statusCode ?? '?'}</td>
-                  <td className="px-4 py-2 font-mono text-slate-600 break-all max-w-xs">{p.url}</td>
+                  <td className="px-4 py-2 font-mono text-slate-600 truncate max-w-xs" title={p.url}>{shortUrl(p.url)}</td>
                   <td className="px-4 py-2 text-slate-500 hidden sm:table-cell truncate max-w-xs">{p.title || '—'}</td>
                   <td className="px-4 py-2 text-slate-400 text-right hidden sm:table-cell">{p.responseMs || '—'}</td>
                 </tr>
@@ -62,13 +84,28 @@ function PagesTable({ pages }) {
   );
 }
 
-function IssueTable({ issues }) {
+function CopyCell({ urlKey, url, maxLen = 60, copiedId, onCopy }) {
+  const isCopied = copiedId === urlKey;
+  if (!url) return <span className="text-slate-300">—</span>;
+  return (
+    <button onClick={() => onCopy(urlKey, url)} title={url} className="text-left w-full group">
+      <span className={`block font-mono text-xs truncate leading-snug ${isCopied ? 'text-green-600' : 'text-slate-600 group-hover:text-brand-600'}`}>
+        {isCopied ? '✓ Copied!' : shortUrl(url, maxLen)}
+      </span>
+    </button>
+  );
+}
+
+function IssueTable({ issues, pages }) {
   const [copiedId, setCopiedId] = useState(null);
 
-  function copyUrl(id, url) {
+  const pageTitle = {};
+  for (const p of pages || []) if (p.url) pageTitle[p.url] = p.title;
+
+  function copyUrl(key, url) {
     if (!url) return;
     navigator.clipboard.writeText(url).then(() => {
-      setCopiedId(id);
+      setCopiedId(key);
       setTimeout(() => setCopiedId(null), 1500);
     });
   }
@@ -86,76 +123,34 @@ function IssueTable({ issues }) {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-24">Severity</th>
-              <th className="text-left px-4 py-2.5 text-slate-500 font-medium">Issue</th>
-              <th className="text-center px-4 py-2.5 text-slate-500 font-medium w-16">#</th>
-              <th className="text-left px-4 py-2.5 text-slate-500 font-medium hidden sm:table-cell w-64">What to do</th>
-              <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-56">URL</th>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-36">Severity</th>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-1/2">Broken URL</th>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium">Found on</th>
             </tr>
           </thead>
           <tbody>
             {groups.map(({ label, items }) => (
               <>
                 <tr key={label} className="bg-slate-50 border-y border-slate-200">
-                  <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <td colSpan={3} className="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     {label} ({items.length})
                   </td>
                 </tr>
-                {items.map(issue => {
-                  const exUrl = issue.example?.target || issue.example?.url || null;
-                  const source = issue.example?.sources?.[0] || null;
-                  const anchor = issue.example?.anchorText || null;
-                  const isCopied = copiedId === issue.id;
+                {items.map((issue, idx) => {
+                  const brokenUrl = issue.example?.target || issue.example?.url || null;
+                  const sourceUrl = issue.example?.sources?.[0] || null;
+                  const tgtKey = `${label}-${idx}-tgt`;
                   return (
-                    <tr key={issue.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 align-top">
-                      {/* Severity */}
+                    <tr key={`${label}-${idx}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 align-middle">
                       <td className="px-4 py-3">
                         <span className={severityBadgeClass(issue.severity)}>{issue.severity}</span>
+                        <div className="text-xs text-slate-500 mt-1 leading-snug">{ISSUE_LABELS[issue.type] || issue.type}</div>
                       </td>
-
-                      {/* Issue title + explanation */}
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-800">{issue.title}</div>
-                        <div className="text-xs text-slate-500 mt-0.5 leading-snug">{issue.explanation}</div>
-                        {/* On small screens, show "What to do" inline */}
-                        <div className="sm:hidden text-xs text-brand-700 mt-1.5 leading-snug">
-                          <span className="font-semibold">Fix: </span>{issue.recommendedAction}
-                        </div>
+                      <td className="px-4 py-3 max-w-0">
+                        <CopyCell urlKey={tgtKey} url={brokenUrl} maxLen={100} copiedId={copiedId} onCopy={copyUrl} />
                       </td>
-
-                      {/* Affected count */}
-                      <td className="px-4 py-3 text-center font-semibold text-slate-700">
-                        {issue.affectedCount}
-                      </td>
-
-                      {/* Recommended action — hidden on small screens */}
-                      <td className="px-4 py-3 text-xs text-slate-600 leading-snug hidden sm:table-cell">
-                        {issue.recommendedAction}
-                      </td>
-
-                      {/* URL — click to copy */}
-                      <td className="px-4 py-3">
-                        {exUrl ? (
-                          <button
-                            onClick={() => copyUrl(issue.id, exUrl)}
-                            title={exUrl}
-                            className="text-left w-full group"
-                          >
-                            <span className={`block font-mono text-xs break-all leading-snug ${isCopied ? 'text-green-600' : 'text-slate-600 group-hover:text-brand-600'}`}>
-                              {isCopied ? '✓ Copied!' : shortUrl(exUrl)}
-                            </span>
-                            {!isCopied && anchor && (
-                              <span className="block text-xs italic text-slate-400 mt-0.5 truncate">"{anchor}"</span>
-                            )}
-                            {!isCopied && source && (
-                              <span className="block text-xs text-slate-400 mt-0.5 truncate" title={source}>
-                                Found on: {shortUrl(source)}
-                              </span>
-                            )}
-                          </button>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
+                      <td className="px-4 py-3 max-w-0">
+                        <FoundOnCell sourceUrl={sourceUrl} title={pageTitle[sourceUrl]} />
                       </td>
                     </tr>
                   );
@@ -264,7 +259,7 @@ export default function Report() {
         )}
 
         {/* Issues table */}
-        {report.totalIssues > 0 && <IssueTable issues={report.issues} />}
+        {report.totalIssues > 0 && <IssueTable issues={report.issues} pages={report.pages} />}
 
         {/* Pages crawled */}
         {report.pages && report.pages.length > 0 && (
