@@ -2,6 +2,10 @@
  * Issue detection rules, fingerprinting, severity assignment.
  */
 
+// Status codes commonly returned by bot-detection systems on otherwise-working sites.
+// Treat these as "likely reachable" rather than broken.
+const BOT_BLOCKED_STATUSES = new Set([403, 426, 429, 526, 530, 999]);
+
 export function detectIssues(scanId, pages, linkChecks) {
   const issues = [];
 
@@ -62,8 +66,8 @@ export function detectIssues(scanId, pages, linkChecks) {
   // ---- Broken images ----
   const brokenImages = linkChecks.filter(
     lc => lc.target_type === 'image' &&
-          lc.response_status !== null &&
-          lc.response_status >= 400
+          (lc.response_status === null || lc.response_status >= 400) &&
+          !BOT_BLOCKED_STATUSES.has(lc.response_status)
   );
   if (brokenImages.length > 0) {
     const grouped = groupByTarget(brokenImages);
@@ -74,7 +78,9 @@ export function detectIssues(scanId, pages, linkChecks) {
         severity: 'important',
         fingerprint: fp(scanId, 'broken_image', target),
         title: `Broken image: ${shortUrl(target)}`,
-        explanation: `This image is missing (${srcs[0].response_status}) and appears broken on ${srcs.length} page${srcs.length > 1 ? 's' : ''}.`,
+        explanation: srcs[0].response_status === null
+          ? `This image could not be reached (DNS failure or network error) and appears broken on ${srcs.length} page${srcs.length > 1 ? 's' : ''}.`
+          : `This image is missing (${srcs[0].response_status}) and appears broken on ${srcs.length} page${srcs.length > 1 ? 's' : ''}.`,
         recommended_action: 'Re-upload the image or update the reference to a valid URL.',
         affected_count: srcs.length,
         example_json: JSON.stringify({
@@ -110,8 +116,8 @@ export function detectIssues(scanId, pages, linkChecks) {
   // ---- Broken external links ----
   const brokenExternal = linkChecks.filter(
     lc => lc.target_type === 'external' &&
-          lc.response_status !== null &&
-          lc.response_status >= 400
+          (lc.response_status === null || lc.response_status >= 400) &&
+          !BOT_BLOCKED_STATUSES.has(lc.response_status)
   );
   if (brokenExternal.length > 0) {
     const grouped = groupByTarget(brokenExternal);
@@ -122,7 +128,9 @@ export function detectIssues(scanId, pages, linkChecks) {
         severity: 'important',
         fingerprint: fp(scanId, 'broken_external_link', target),
         title: `Broken external link: ${shortUrl(target)}`,
-        explanation: `This external link returns a ${srcs[0].response_status} error. Visitors who click it will see an error.`,
+        explanation: srcs[0].response_status === null
+          ? 'This external link could not be reached (DNS failure or network error). The domain may no longer exist.'
+          : `This external link returns a ${srcs[0].response_status} error. Visitors who click it will see an error.`,
         recommended_action: 'Remove or replace this external link.',
         affected_count: srcs.length,
         example_json: JSON.stringify({
@@ -137,7 +145,7 @@ export function detectIssues(scanId, pages, linkChecks) {
 
   // ---- Missing page title ----
   for (const page of pages) {
-    if (page.status_code === 200 && (!page.title || page.title.trim() === '')) {
+    if (page.status_code === 200 && (!page.title || page.title.trim() === '') && isHtmlPage(page)) {
       issues.push({
         scan_id: scanId,
         issue_type: 'missing_title',
@@ -154,7 +162,7 @@ export function detectIssues(scanId, pages, linkChecks) {
 
   // ---- Thin page ----
   for (const page of pages) {
-    if (page.status_code === 200 && page.text_length !== null && page.text_length < 200) {
+    if (page.status_code === 200 && page.text_length !== null && page.text_length < 200 && isHtmlPage(page)) {
       issues.push({
         scan_id: scanId,
         issue_type: 'thin_page',
@@ -206,10 +214,15 @@ function fp(scanId, type, url) {
 function shortUrl(url) {
   try {
     const u = new URL(url);
-    return u.hostname + u.pathname;
+    const full = u.hostname + u.pathname;
+    return full.length > 60 ? full.slice(0, 60) + '…' : full;
   } catch {
-    return url;
+    return url.length > 60 ? url.slice(0, 60) + '…' : url;
   }
+}
+
+function isHtmlPage(page) {
+  return page.content_type && page.content_type.includes('text/html');
 }
 
 export function computeHealthScore(issues) {

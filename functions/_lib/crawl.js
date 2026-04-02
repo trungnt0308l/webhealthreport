@@ -8,6 +8,22 @@
  * - Links capped at 100 to limit normalization loop
  */
 
+/**
+ * If a URL's path contains an unencoded '://' (e.g. a proxy CDN that embeds a full
+ * URL in the path like /fetch/.../https://media.cdn.example.com/...), the WHATWG URL
+ * parser collapses the inner '//' to '/', producing a wrong URL. Pre-encode those
+ * occurrences so the path is preserved correctly.
+ */
+function encodeEmbeddedProtocols(urlStr) {
+  const schemeEndIdx = urlStr.indexOf('://');
+  if (schemeEndIdx < 0) return urlStr;
+  const pathStart = urlStr.indexOf('/', schemeEndIdx + 3);
+  if (pathStart < 0) return urlStr;
+  const path = urlStr.slice(pathStart);
+  if (!path.includes('://')) return urlStr;
+  return urlStr.slice(0, pathStart) + path.replaceAll('://', '%3A%2F%2F');
+}
+
 const TRACKING_PARAMS = new Set([
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
   'fbclid', 'gclid', 'msclkid', 'ref', 'source',
@@ -17,7 +33,7 @@ const MAX_LINKS_PER_PAGE = 250;
 
 export function normalizeUrl(urlStr, baseUrl) {
   try {
-    const url = new URL(urlStr, baseUrl);
+    const url = new URL(encodeEmbeddedProtocols(urlStr), baseUrl);
     url.hash = '';
     url.hostname = url.hostname.toLowerCase();
     if ((url.protocol === 'https:' && url.port === '443') ||
@@ -35,6 +51,28 @@ export function normalizeUrl(urlStr, baseUrl) {
 }
 
 /**
+ * Normalize an external link URL for deduplication.
+ * Strips query parameters — we only need to verify hostname+path is reachable,
+ * not each unique query string variant (e.g. google.com/maps/dir/?destination=X).
+ */
+export function normalizeExternalUrl(urlStr, baseUrl) {
+  try {
+    const url = new URL(encodeEmbeddedProtocols(urlStr), baseUrl);
+    url.hash = '';
+    url.search = '';
+    url.hostname = url.hostname.toLowerCase();
+    if ((url.protocol === 'https:' && url.port === '443') ||
+        (url.protocol === 'http:' && url.port === '80')) {
+      url.port = '';
+    }
+    if (url.pathname === '') url.pathname = '/';
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Normalize an image URL for deduplication and queuing.
  * Strips all query parameters — image health checks don't depend on
  * per-impression query params (tracking pixels, signed URLs, etc.).
@@ -43,7 +81,7 @@ export function normalizeUrl(urlStr, baseUrl) {
  */
 export function normalizeImageUrl(urlStr, baseUrl) {
   try {
-    const url = new URL(urlStr, baseUrl);
+    const url = new URL(encodeEmbeddedProtocols(urlStr), baseUrl);
     url.hash = '';
     url.search = '';
     url.hostname = url.hostname.toLowerCase();
@@ -86,7 +124,7 @@ export function isHtmlContentType(ct) {
  * Text length sampled from content elements only, stops at 300 chars.
  * Returns links as [{href, text}] — text is the visible anchor text.
  */
-const MAX_IMAGES_PER_PAGE = 50;
+const MAX_IMAGES_PER_PAGE = 250;
 
 /**
  * Parse srcset attribute value into an array of URLs.

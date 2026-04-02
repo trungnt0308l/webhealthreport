@@ -7,17 +7,17 @@
  * - ALL D1 writes collected first, then a single batchAll at the end
  * - No individual await DB calls inside loops
  */
-import { normalizeUrl, normalizeImageUrl, parseHtml, isInternalUrl, isHtmlContentType } from '../../../_lib/crawl.js';
+import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInternalUrl, isHtmlContentType } from '../../../_lib/crawl.js';
 import { checkBatch, fetchPage } from '../../../_lib/checker.js';
 import { detectIssues } from '../../../_lib/issues.js';
 import { generateReport } from '../../../_lib/report.js';
 
-const HTML_BATCH_SIZE = 1;   // one full page fetch+parse per poll — CPU budget is tight
-const HEAD_BATCH_SIZE = 5;   // HEAD checks — all run in parallel
+const HTML_BATCH_SIZE = 3;   // pages fetched+parsed in parallel per poll
+const HEAD_BATCH_SIZE = 10;  // HEAD checks — all run in parallel
 const MAX_PAGES = 1000;
 const MAX_LINKS = 10000;
 const MAX_DEPTH = 5;
-const D1_CHUNK = 100;
+const D1_CHUNK = 30;
 
 function cors(response) {
   const r = new Response(response.body, response);
@@ -154,21 +154,31 @@ export async function onRequestGet({ params, env }) {
     // Queue new links discovered on this page
     if (newDepth <= MAX_DEPTH) {
       for (const { href, text } of r.links) {
-        const norm = normalizeUrl(href, absUrl);
+        const norm = normalizeUrl(href, r.finalUrl);
         if (!norm || seen.has(norm)) continue;
         seen.add(norm);
         try {
           const u = new URL(norm);
           if (u.protocol !== 'http:' && u.protocol !== 'https:') continue;
           const isInternal = isInternalUrl(norm, baseDomain);
+          // External links: strip query params for deduplication — we only
+          // need to verify the hostname+path is reachable, not each unique
+          // query string (e.g. google.com/maps/dir/?destination=X variants).
+          const queueNorm = isInternal ? norm : normalizeExternalUrl(norm, r.finalUrl);
+          if (!queueNorm) continue;
+          // For external links, queueNorm strips query params — check for duplicates
+          // across variants. For internal links queueNorm === norm (already in seen),
+          // so skip this check to avoid blocking every internal link.
+          if (norm !== queueNorm && seen.has(queueNorm)) continue;
+          if (norm !== queueNorm) seen.add(queueNorm);
           queueInserts.push(env.DB.prepare(
             `INSERT OR IGNORE INTO crawl_queue (scan_id, url, normalized_url, url_type, source_url, depth, anchor_text)
              VALUES (?, ?, ?, ?, ?, ?, ?)`
-          ).bind(scanId, norm, norm, isInternal ? 'internal' : 'external', absUrl, newDepth, text || ''));
+          ).bind(scanId, norm, queueNorm, isInternal ? 'internal' : 'external', absUrl, newDepth, text || ''));
         } catch { /* skip */ }
       }
       for (const { src, alt } of r.images) {
-        const norm = normalizeImageUrl(src, absUrl);
+        const norm = normalizeImageUrl(src, r.finalUrl);
         if (!norm || seen.has(norm)) continue;
         seen.add(norm);
         try {
@@ -184,15 +194,16 @@ export async function onRequestGet({ params, env }) {
   }
 
   // --- HEAD checks: external links + images ---
+  let headResults = [];
   if (headItems.length > 0) {
-    const results = await checkBatch(headItems.map(i => ({
+    headResults = await checkBatch(headItems.map(i => ({
       url: i.normalized_url,
       normalized_url: i.normalized_url,
       url_type: i.url_type,
       source_url: i.source_url || scan.url,
       anchor_text: i.anchor_text || '',
     })));
-    for (const r of results) {
+    for (const r of headResults) {
       newLinksChecked++;
       linkCheckInserts.push(env.DB.prepare(
         `INSERT INTO link_checks (scan_id, source_url, target_url, normalized_target_url, target_type, response_status, redirect_count, final_url, response_ms, anchor_text)
@@ -200,6 +211,12 @@ export async function onRequestGet({ params, env }) {
       ).bind(scanId, r.source_url || scan.url, r.url, r.normalized_url, r.url_type, r.status, r.redirectCount || 0, r.finalUrl || r.url, r.responseMs || 0, r.anchor_text || ''));
     }
   }
+
+  // Build recentChecks from current batch (no DB query needed)
+  const batchChecks = [
+    ...htmlResults.map(r => ({ url: r.item.normalized_url, type: 'internal', status: r.statusCode, ms: r.responseMs })),
+    ...headResults.map(r => ({ url: r.url, type: r.url_type, status: r.status, ms: r.responseMs || 0 })),
+  ].slice(-20);
 
   // Mark items done
   const doneUpdates = items.map(i =>
@@ -225,7 +242,7 @@ export async function onRequestGet({ params, env }) {
   ]);
 
   const updated = await env.DB.prepare('SELECT * FROM scans WHERE id = ?').bind(scanId).first();
-  const resp = await buildProgressResponse(env, updated);
+  const resp = await buildProgressResponse(env, updated, batchChecks);
   return cors(new Response(JSON.stringify(resp), { headers: { 'Content-Type': 'application/json' } }));
 }
 
@@ -233,9 +250,18 @@ async function finalize(env, scan, scanId) {
   const now = Math.floor(Date.now() / 1000);
   await env.DB.prepare(`UPDATE scans SET current_step = 'Analyzing issues' WHERE id = ?`).bind(scanId).run();
 
-  const pages = await env.DB.prepare('SELECT * FROM pages WHERE scan_id = ?').bind(scanId).all();
-  const linkChecks = await env.DB.prepare('SELECT * FROM link_checks WHERE scan_id = ?').bind(scanId).all();
-  const issues = detectIssues(scanId, pages.results || [], linkChecks.results || []);
+  // Fetch pages and link_checks in parallel — they're independent queries
+  const [pagesResult, linkChecksResult] = await Promise.all([
+    env.DB.prepare(
+      `SELECT url, status_code, title, text_length, response_ms, content_type FROM pages WHERE scan_id = ?`
+    ).bind(scanId).all(),
+    env.DB.prepare(
+      `SELECT target_type, response_status, redirect_count, normalized_target_url, source_url, anchor_text, final_url FROM link_checks WHERE scan_id = ?`
+    ).bind(scanId).all(),
+  ]);
+  const pageList = pagesResult.results || [];
+  const linkCheckList = linkChecksResult.results || [];
+  const issues = detectIssues(scanId, pageList, linkCheckList);
 
   if (issues.length > 0) {
     await batchAll(env, issues.map(i =>
@@ -246,58 +272,37 @@ async function finalize(env, scan, scanId) {
     ));
   }
 
-  await env.DB.prepare(`UPDATE scans SET current_step = 'Building report' WHERE id = ?`).bind(scanId).run();
-  await generateReport(env, scanId);
-  await env.DB.prepare(
-    `UPDATE scans SET status = 'complete', finished_at = ?, issues_found = ?, current_step = 'Complete' WHERE id = ?`
-  ).bind(now, issues.length, scanId).run();
+  await env.DB.prepare(`UPDATE scans SET status = 'complete', finished_at = ?, issues_found = ?, current_step = 'Building report' WHERE id = ?`).bind(now, issues.length, scanId).run();
+
+  // Pass pre-loaded data so generateReport doesn't re-fetch from DB
+  const updatedScan = { ...scan, finished_at: now, issues_found: issues.length, status: 'complete' };
+  await generateReport(env, scanId, updatedScan, issues, pageList);
+
+  await env.DB.prepare(`UPDATE scans SET current_step = 'Complete' WHERE id = ?`).bind(scanId).run();
 }
 
-async function buildProgressResponse(env, scan) {
-  const [recent, errorData] = await Promise.all([
-    env.DB.prepare(
-      `SELECT target_url, target_type, response_status, response_ms FROM link_checks
-       WHERE scan_id = ? ORDER BY id DESC LIMIT 20`
-    ).bind(scan.id).all(),
-    // During scan: fetch live errors list + count; after complete use issues_found
-    scan.status === 'complete'
-      ? Promise.resolve(null)
-      : env.DB.prepare(
-          `SELECT target_url, target_type, response_status, source_url FROM link_checks
-           WHERE scan_id = ? AND response_status >= 400
-           ORDER BY id DESC LIMIT 50`
-        ).bind(scan.id).all(),
-  ]);
-
-  const errorsFound = scan.status === 'complete'
-    ? (scan.issues_found || 0)
-    : (errorData?.results?.length || 0);
-
-  const liveErrors = scan.status !== 'complete'
-    ? (errorData?.results || []).map(r => ({
-        url: r.target_url,
-        type: r.target_type,
-        status: r.response_status,
-        sourceUrl: r.source_url,
-      }))
-    : [];
+async function buildProgressResponse(env, scan, recentChecks = []) {
+  // One cheap COUNT query using the (scan_id, status) index — only during active scan
+  let pendingCount = 0;
+  if (scan.status === 'running') {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS cnt FROM crawl_queue WHERE scan_id = ? AND status = 'pending'`
+    ).bind(scan.id).first();
+    pendingCount = row?.cnt ?? 0;
+  }
 
   return {
     scanId: scan.id,
+    url: scan.url,
     status: scan.status,
     currentStep: scan.current_step,
     pagesCrawled: scan.pages_crawled || 0,
     linksChecked: scan.links_checked || 0,
-    issuesFound: errorsFound,
-    errorsAreLive: scan.status !== 'complete',
+    issuesFound: scan.issues_found || 0,
+    pendingCount,
     startedAt: scan.started_at,
     finishedAt: scan.finished_at || null,
-    recentChecks: (recent.results || []).map(r => ({
-      url: r.target_url,
-      type: r.target_type,
-      status: r.response_status,
-      ms: r.response_ms,
-    })),
-    liveErrors,
+    recentChecks,
+    liveErrors: [],
   };
 }

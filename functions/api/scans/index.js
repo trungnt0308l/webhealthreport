@@ -96,7 +96,7 @@ export async function onRequestPost({ request, env }) {
     const toInsert = [];
 
     for (const { href, text } of links) {
-      const norm = normalizeUrl(href, normalizedStart);
+      const norm = normalizeUrl(href, finalUrl);
       if (!norm || seen.has(norm)) continue;
       seen.add(norm);
       try {
@@ -108,7 +108,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     for (const { src, alt } of images) {
-      const norm = normalizeImageUrl(src, normalizedStart);
+      const norm = normalizeImageUrl(src, finalUrl);
       if (!norm || seen.has(norm)) continue;
       seen.add(norm);
       try {
