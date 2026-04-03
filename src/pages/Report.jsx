@@ -141,12 +141,12 @@ function IssueTable({ issues }) {
                             title={exUrl}
                             className="text-left w-full group"
                           >
+                            {!isCopied && anchor && (
+                              <span className="block text-xs italic text-slate-400 mb-0.5 truncate">"{anchor}"</span>
+                            )}
                             <span className={`block font-mono text-xs break-all leading-snug ${isCopied ? 'text-green-600' : 'text-slate-600 group-hover:text-brand-600'}`}>
                               {isCopied ? '✓ Copied!' : shortUrl(exUrl)}
                             </span>
-                            {!isCopied && anchor && (
-                              <span className="block text-xs italic text-slate-400 mt-0.5 truncate">"{anchor}"</span>
-                            )}
                             {!isCopied && source && (
                               <span className="block text-xs text-slate-400 mt-0.5 truncate" title={source}>
                                 Found on: {shortUrl(source)}

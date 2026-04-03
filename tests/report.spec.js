@@ -23,7 +23,7 @@ const MOCK_REPORT = {
       recommendedAction: 'Fix or redirect the broken URLs.',
       affectedCount: 2,
       type: 'broken_internal',
-      example: { url: 'https://example.com/missing', sources: ['https://example.com/'] },
+      example: { url: 'https://example.com/missing', anchorText: 'Read more', sources: ['https://example.com/'] },
     },
     {
       id: 'i2',
@@ -116,6 +116,10 @@ test.describe('Report page', () => {
 
   test('shows example URL for issue', async ({ page }) => {
     await expect(page.getByText(/example\.com\/missing/)).toBeVisible();
+  });
+
+  test('shows anchor text above broken link URL', async ({ page }) => {
+    await expect(page.getByText('"Read more"')).toBeVisible();
   });
 
   test('clicking URL copies to clipboard and shows Copied!', async ({ page, context }) => {
