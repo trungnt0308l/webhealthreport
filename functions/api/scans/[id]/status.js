@@ -10,7 +10,6 @@
 import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInternalUrl, isHtmlContentType } from '../../../_lib/crawl.js';
 import { checkBatch, fetchPage } from '../../../_lib/checker.js';
 import { detectIssues } from '../../../_lib/issues.js';
-import { generateReport } from '../../../_lib/report.js';
 
 const HTML_BATCH_SIZE = 3;   // pages fetched+parsed in parallel per poll
 const HEAD_BATCH_SIZE = 10;  // HEAD checks — all run in parallel
@@ -250,18 +249,59 @@ async function finalize(env, scan, scanId) {
   const now = Math.floor(Date.now() / 1000);
   await env.DB.prepare(`UPDATE scans SET current_step = 'Analyzing issues' WHERE id = ?`).bind(scanId).run();
 
-  // Fetch pages and link_checks in parallel — they're independent queries
-  const [pagesResult, linkChecksResult] = await Promise.all([
+  // Fetch pages and only the problematic link_check rows — avoids deserializing
+  // all 10k rows when only a small fraction are broken/redirect chains.
+  // internalSources is a lightweight grouped query (one row per target page) used
+  // only for the thin_page "found on" source lookup.
+  const BOT_CODES = '403,426,429,526,530,999';
+  const [
+    pagesResult,
+    brokenInternalResult,
+    brokenImagesResult,
+    redirectChainsResult,
+    brokenExternalResult,
+    internalSourcesResult,
+  ] = await Promise.all([
     env.DB.prepare(
       `SELECT url, status_code, title, text_length, response_ms, content_type FROM pages WHERE scan_id = ?`
     ).bind(scanId).all(),
     env.DB.prepare(
-      `SELECT target_type, response_status, redirect_count, normalized_target_url, source_url, anchor_text, final_url FROM link_checks WHERE scan_id = ?`
+      `SELECT 'internal' AS target_type, normalized_target_url, source_url, anchor_text, response_status, 0 AS redirect_count, NULL AS final_url
+       FROM link_checks WHERE scan_id = ? AND target_type = 'internal' AND response_status >= 400`
+    ).bind(scanId).all(),
+    env.DB.prepare(
+      `SELECT 'image' AS target_type, normalized_target_url, source_url, anchor_text, response_status, 0 AS redirect_count, NULL AS final_url
+       FROM link_checks WHERE scan_id = ? AND target_type = 'image'
+       AND (response_status IS NULL OR (response_status >= 400 AND response_status NOT IN (${BOT_CODES})))`
+    ).bind(scanId).all(),
+    env.DB.prepare(
+      `SELECT 'internal' AS target_type, normalized_target_url, source_url, NULL AS anchor_text, response_status, redirect_count, final_url
+       FROM link_checks WHERE scan_id = ? AND target_type = 'internal' AND redirect_count >= 2`
+    ).bind(scanId).all(),
+    env.DB.prepare(
+      `SELECT 'external' AS target_type, normalized_target_url, source_url, anchor_text, response_status, 0 AS redirect_count, NULL AS final_url
+       FROM link_checks WHERE scan_id = ? AND target_type = 'external'
+       AND (response_status IS NULL OR (response_status >= 400 AND response_status NOT IN (${BOT_CODES})))`
+    ).bind(scanId).all(),
+    env.DB.prepare(
+      `SELECT normalized_target_url, MIN(source_url) AS source_url
+       FROM link_checks WHERE scan_id = ? AND target_type = 'internal'
+       GROUP BY normalized_target_url`
     ).bind(scanId).all(),
   ]);
+
   const pageList = pagesResult.results || [];
-  const linkCheckList = linkChecksResult.results || [];
-  const issues = detectIssues(scanId, pageList, linkCheckList);
+  const linkCheckList = [
+    ...(brokenInternalResult.results || []),
+    ...(brokenImagesResult.results || []),
+    ...(redirectChainsResult.results || []),
+    ...(brokenExternalResult.results || []),
+  ];
+  // Build a Map from target URL → source URL for thin_page "found on" lookup
+  const internalSourceMap = new Map(
+    (internalSourcesResult.results || []).map(r => [r.normalized_target_url, r.source_url])
+  );
+  const issues = detectIssues(scanId, pageList, linkCheckList, internalSourceMap);
 
   if (issues.length > 0) {
     await batchAll(env, issues.map(i =>
@@ -272,13 +312,7 @@ async function finalize(env, scan, scanId) {
     ));
   }
 
-  await env.DB.prepare(`UPDATE scans SET status = 'complete', finished_at = ?, issues_found = ?, current_step = 'Building report' WHERE id = ?`).bind(now, issues.length, scanId).run();
-
-  // Pass pre-loaded data so generateReport doesn't re-fetch from DB
-  const updatedScan = { ...scan, finished_at: now, issues_found: issues.length, status: 'complete' };
-  await generateReport(env, scanId, updatedScan, issues, pageList);
-
-  await env.DB.prepare(`UPDATE scans SET current_step = 'Complete' WHERE id = ?`).bind(scanId).run();
+  await env.DB.prepare(`UPDATE scans SET status = 'complete', finished_at = ?, issues_found = ?, current_step = 'Complete' WHERE id = ?`).bind(now, issues.length, scanId).run();
 }
 
 async function buildProgressResponse(env, scan, recentChecks = []) {

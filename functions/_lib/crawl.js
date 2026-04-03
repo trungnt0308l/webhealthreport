@@ -9,6 +9,29 @@
  */
 
 /**
+ * Decode HTML entities in a string.
+ * Handles decimal (&#NNN;), hex (&#xHHH;), and common named entities.
+ * Used to normalize href/src attributes and title text before URL parsing or storage,
+ * because Cloudflare HTMLRewriter returns raw HTML-encoded values from getAttribute().
+ */
+const NAMED_ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'",
+  nbsp: '\u00a0', ndash: '\u2013', mdash: '\u2014',
+  lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201c', rdquo: '\u201d',
+  copy: '\u00a9', reg: '\u00ae', trade: '\u2122', hellip: '\u2026',
+};
+
+function decodeHtmlEntities(str) {
+  if (!str || !str.includes('&')) return str;
+  return str.replace(/&(?:#(\d+)|#x([0-9a-fA-F]+)|([a-zA-Z]+));/g, (match, dec, hex, name) => {
+    if (dec) return String.fromCodePoint(parseInt(dec, 10));
+    if (hex) return String.fromCodePoint(parseInt(hex, 16));
+    if (name) return NAMED_ENTITIES[name] ?? match;
+    return match;
+  });
+}
+
+/**
  * If a URL's path contains an unencoded '://' (e.g. a proxy CDN that embeds a full
  * URL in the path like /fetch/.../https://media.cdn.example.com/...), the WHATWG URL
  * parser collapses the inner '//' to '/', producing a wrong URL. Pre-encode those
@@ -74,22 +97,22 @@ export function normalizeExternalUrl(urlStr, baseUrl) {
 
 /**
  * Normalize an image URL for deduplication and queuing.
- * Strips all query parameters — image health checks don't depend on
- * per-impression query params (tracking pixels, signed URLs, etc.).
- * Without this, a tracking pixel like blank.gif?id=abc and blank.gif?id=def
- * would be treated as distinct URLs and checked multiple times.
+ * Strips only common tracking parameters (same as normalizeUrl) so that
+ * CDN resize/format params (e.g. w=800, format=webp) are preserved.
  */
 export function normalizeImageUrl(urlStr, baseUrl) {
   try {
     const url = new URL(encodeEmbeddedProtocols(urlStr), baseUrl);
     url.hash = '';
-    url.search = '';
     url.hostname = url.hostname.toLowerCase();
     if ((url.protocol === 'https:' && url.port === '443') ||
         (url.protocol === 'http:' && url.port === '80')) {
       url.port = '';
     }
     if (url.pathname === '') url.pathname = '/';
+    for (const key of TRACKING_PARAMS) {
+      url.searchParams.delete(key);
+    }
     return url.href;
   } catch {
     return null;
@@ -136,7 +159,7 @@ function parseSrcset(srcset) {
   if (!srcset) return [];
   return srcset
     .split(/,\s+/)
-    .map(entry => entry.trim().split(/\s+/)[0])  // take URL before width/density descriptor
+    .map(entry => decodeHtmlEntities(entry.trim().split(/\s+/)[0]))  // take URL before width/density descriptor
     .filter(u => u && !u.startsWith('data:'));
 }
 
@@ -165,7 +188,7 @@ export async function parseHtml(response) {
     .on('a[href]', {
       element(el) {
         if (links.length >= MAX_LINKS_PER_PAGE) { curIdx = -1; return; }
-        const href = el.getAttribute('href');
+        const href = decodeHtmlEntities(el.getAttribute('href'));
         if (href && !href.startsWith('mailto:') && !href.startsWith('tel:') &&
             !href.startsWith('javascript:') && !href.startsWith('#')) {
           links.push({ href, text: '' });
@@ -182,7 +205,7 @@ export async function parseHtml(response) {
       element(el) {
         const alt = el.getAttribute('alt') || '';
         // Prefer data-src (lazy loading) over src; also extract all srcset URLs
-        const src = el.getAttribute('data-src') || el.getAttribute('src');
+        const src = decodeHtmlEntities(el.getAttribute('data-src') || el.getAttribute('src'));
         if (src) addImage(src, alt);
         for (const u of parseSrcset(el.getAttribute('srcset') || el.getAttribute('data-srcset') || '')) {
           addImage(u, alt);
@@ -205,10 +228,10 @@ export async function parseHtml(response) {
     .transform(response)
     .arrayBuffer();
 
-  for (const l of links) l.text = l.text.trim().slice(0, 100);
+  for (const l of links) l.text = decodeHtmlEntities(l.text.trim()).slice(0, 100);
 
   return {
-    title: title.trim(),
+    title: decodeHtmlEntities(title.trim()),
     links,
     images,
     visibleTextLength,

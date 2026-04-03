@@ -3,6 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import { getScanReport } from '../lib/api.js';
 import { scoreColor, scoreBgColor, severityBadgeClass, gradeDescription } from '../lib/format.js';
 
+function decodeEntities(str) {
+  if (!str || !str.includes('&')) return str;
+  const txt = document.createElement('textarea');
+  txt.innerHTML = str;
+  return txt.value;
+}
+
 function statusCodeColor(code) {
   if (!code) return 'text-slate-400';
   if (code < 300) return 'text-green-600';
@@ -14,7 +21,7 @@ function shortUrl(url, maxLen = 60) {
   if (!url) return '';
   try {
     const u = new URL(url);
-    const full = u.hostname + u.pathname;
+    const full = u.hostname + u.pathname + u.search;
     return full.length > maxLen ? full.slice(0, maxLen) + '…' : full;
   } catch {
     return url.length > maxLen ? url.slice(0, maxLen) + '…' : url;
@@ -34,7 +41,7 @@ const ISSUE_LABELS = {
 
 function FoundOnCell({ sourceUrl, title }) {
   if (!sourceUrl) return <span className="text-slate-300">—</span>;
-  const display = title || shortUrl(sourceUrl, 60);
+  const display = title ? decodeEntities(title) : shortUrl(sourceUrl, 60);
   return (
     <a href={sourceUrl} target="_blank" rel="noopener noreferrer"
        className="text-brand-600 hover:underline text-xs truncate block max-w-xs leading-snug" title={sourceUrl}>
@@ -72,7 +79,7 @@ function PagesTable({ pages }) {
                 <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                   <td className={`px-4 py-2 font-mono font-bold ${statusCodeColor(p.statusCode)}`}>{p.statusCode ?? '?'}</td>
                   <td className="px-4 py-2 font-mono text-slate-600 truncate max-w-xs" title={p.url}>{shortUrl(p.url)}</td>
-                  <td className="px-4 py-2 text-slate-500 hidden sm:table-cell truncate max-w-xs">{p.title || '—'}</td>
+                  <td className="px-4 py-2 text-slate-500 hidden sm:table-cell truncate max-w-xs">{p.title ? decodeEntities(p.title) : '—'}</td>
                   <td className="px-4 py-2 text-slate-400 text-right hidden sm:table-cell">{p.responseMs || '—'}</td>
                 </tr>
               ))}
@@ -138,7 +145,9 @@ function IssueTable({ issues, pages }) {
                 </tr>
                 {items.map((issue, idx) => {
                   const brokenUrl = issue.example?.target || issue.example?.url || null;
-                  const sourceUrl = issue.example?.sources?.[0] || null;
+                  const sourceUrl = Array.isArray(issue.example?.sources)
+                    ? (issue.example.sources[0] || null)
+                    : (issue.example?.url || null);
                   const tgtKey = `${label}-${idx}-tgt`;
                   return (
                     <tr key={`${label}-${idx}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 align-middle">
@@ -147,6 +156,11 @@ function IssueTable({ issues, pages }) {
                         <div className="text-xs text-slate-500 mt-1 leading-snug">{ISSUE_LABELS[issue.type] || issue.type}</div>
                       </td>
                       <td className="px-4 py-3 max-w-0">
+                        {issue.example?.anchorText && (
+                          <div className="text-xs text-slate-400 mb-0.5 truncate" title={decodeEntities(issue.example.anchorText)}>
+                            "{decodeEntities(issue.example.anchorText)}"
+                          </div>
+                        )}
                         <CopyCell urlKey={tgtKey} url={brokenUrl} maxLen={100} copiedId={copiedId} onCopy={copyUrl} />
                       </td>
                       <td className="px-4 py-3 max-w-0">

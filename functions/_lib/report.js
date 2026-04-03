@@ -1,22 +1,29 @@
 /**
  * Report generation — produces the summary JSON stored in reports table.
+ * Accepts pre-loaded scan/issues/pages from finalize() to avoid re-fetching.
  */
 import { computeHealthScore, scoreGrade } from './issues.js';
 
-export async function generateReport(env, scanId) {
-  const scan = await env.DB.prepare('SELECT * FROM scans WHERE id = ?').bind(scanId).first();
-  const issues = await env.DB.prepare('SELECT * FROM issues WHERE scan_id = ? ORDER BY severity, issue_type').bind(scanId).all();
-  const pages = await env.DB.prepare('SELECT * FROM pages WHERE scan_id = ?').bind(scanId).all();
+export async function generateReport(env, scanId, scan, issues, pageList) {
+  // Fall back to DB fetch if called without pre-loaded data (e.g. from report endpoint)
+  if (!scan) {
+    scan = await env.DB.prepare('SELECT * FROM scans WHERE id = ?').bind(scanId).first();
+  }
+  if (!issues) {
+    const result = await env.DB.prepare('SELECT * FROM issues WHERE scan_id = ? ORDER BY severity, issue_type').bind(scanId).all();
+    issues = result.results || [];
+  }
+  if (!pageList) {
+    const result = await env.DB.prepare('SELECT url, status_code, title, text_length, response_ms FROM pages WHERE scan_id = ?').bind(scanId).all();
+    pageList = result.results || [];
+  }
 
-  const issueList = issues.results || [];
-  const pageList = pages.results || [];
-
-  const healthScore = computeHealthScore(issueList);
+  const healthScore = computeHealthScore(issues);
   const grade = scoreGrade(healthScore);
 
-  const critical = issueList.filter(i => i.severity === 'critical');
-  const important = issueList.filter(i => i.severity === 'important');
-  const minor = issueList.filter(i => i.severity === 'minor');
+  const critical = issues.filter(i => i.severity === 'critical');
+  const important = issues.filter(i => i.severity === 'important');
+  const minor = issues.filter(i => i.severity === 'minor');
 
   const summary = {
     scanId,
@@ -27,11 +34,11 @@ export async function generateReport(env, scanId) {
     grade,
     pagesChecked: scan.pages_crawled,
     linksChecked: scan.links_checked,
-    totalIssues: issueList.length,
+    totalIssues: issues.length,
     criticalCount: critical.length,
     importantCount: important.length,
     minorCount: minor.length,
-    issues: issueList.map(i => ({
+    issues: issues.map(i => ({
       id: i.id,
       type: i.issue_type,
       severity: i.severity,
