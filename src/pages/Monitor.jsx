@@ -5,7 +5,10 @@ const SESSION_KEY = 'monitor_key';
 
 function formatDate(unixTs) {
   if (!unixTs) return '—';
-  return new Date(unixTs * 1000).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(unixTs * 1000).toLocaleString('en-US', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
 }
 
 function Header() {

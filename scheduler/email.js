@@ -23,7 +23,10 @@ export async function sendReportEmail(env, site, report) {
 
 function buildEmailHtml(report) {
   const date = report.scannedAt
-    ? new Date(report.scannedAt * 1000).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+    ? new Date(report.scannedAt * 1000).toLocaleString('en-US', {
+        day: 'numeric', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
     : '';
 
   const gradeColor = {
@@ -63,7 +66,7 @@ function buildEmailHtml(report) {
           <td style="background:#1e40af;padding:20px 28px;">
             <span style="font-size:18px;font-weight:700;color:#fff;">Website Health Report</span>
             <span style="display:block;font-size:13px;color:#93c5fd;margin-top:2px;">
-              ${htmlEsc(report.baseDomain)} &nbsp;·&nbsp; ${date}
+              <a href="https://${htmlEsc(report.baseDomain)}" style="color:#93c5fd;text-decoration:none;">${htmlEsc(report.baseDomain)}</a> &nbsp;·&nbsp; ${date}
             </span>
           </td>
         </tr>
@@ -74,8 +77,8 @@ function buildEmailHtml(report) {
             <table cellpadding="0" cellspacing="0" width="100%">
               <tr>
                 <td width="80" style="vertical-align:middle;">
-                  <div style="width:72px;height:72px;border-radius:50%;border:4px solid ${gradeColor};display:flex;align-items:center;justify-content:center;">
-                    <span style="font-size:28px;font-weight:800;color:${gradeColor};">${report.healthScore}</span>
+                  <div style="width:72px;height:72px;border-radius:50%;border:4px solid ${gradeColor};text-align:center;line-height:72px;">
+                    <span style="font-size:28px;font-weight:800;color:${gradeColor};line-height:72px;">${report.healthScore}</span>
                   </div>
                 </td>
                 <td style="padding-left:20px;vertical-align:middle;">
