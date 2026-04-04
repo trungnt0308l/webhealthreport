@@ -8,7 +8,7 @@ import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInt
 import { checkBatch, fetchPage } from './checker.js';
 import { detectIssues } from './issues.js';
 
-const HTML_BATCH_SIZE = 3;
+const HTML_BATCH_SIZE = 10;
 const HEAD_BATCH_SIZE = 10;
 const MAX_PAGES = 1000;
 const MAX_LINKS = 10000;

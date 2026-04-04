@@ -18,7 +18,7 @@ queue   = "webhealthreport-scans"
 queue              = "webhealthreport-scans"
 max_batch_size     = 1
 max_batch_timeout  = 30
-max_retries        = 20     # 20 × ~12 min ≈ 4 hrs max per scan
+max_retries        = 100    # Cloudflare max; each retry processes one batch (~30 subrequests)
 dead_letter_queue  = "webhealthreport-scans-dlq"
 max_concurrency    = 5
 

@@ -36,7 +36,8 @@ export async function onRequestGet({ request, env }) {
   if (denied) return denied;
 
   const result = await env.DB.prepare(
-    `SELECT id, url, base_domain, emails, last_scan_id, pending_scan_id, next_scan_at, created_at
+    `SELECT id, url, base_domain, emails, last_scan_id, pending_scan_id, next_scan_at, created_at,
+            last_scan_status, last_scan_error
      FROM monitored_sites ORDER BY created_at DESC`
   ).all();
 

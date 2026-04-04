@@ -95,34 +95,38 @@ async function launchDueScans(env) {
 
 async function runScan(env, msg) {
   const { scanId, siteId } = msg.body;
-  const deadline = Date.now() + 12 * 60 * 1000; // 12 min budget
 
+  // Abort scans stuck longer than 4 hours (safety valve for infinite re-queue loops)
+  const scan = await env.DB.prepare('SELECT started_at FROM scans WHERE id = ?').bind(scanId).first();
+  if (scan && (Date.now() / 1000 - scan.started_at) > 4 * 3600) {
+    await releaseSite(env, siteId, 'failed', 'Scan timed out after 4 hours');
+    msg.ack();
+    return;
+  }
+
+  // One processBatch call per invocation — keeps subrequest count well within
+  // Cloudflare's per-invocation limit.
   try {
-    while (Date.now() < deadline) {
-      const { status } = await processBatch(env, scanId);
+    const { status } = await processBatch(env, scanId);
 
-      if (status === 'complete') {
-        await onScanComplete(env, msg, scanId, siteId);
-        return;
-      }
-      if (status === 'failed') {
-        await releaseSite(env, siteId, 'failed', 'Scan failed during processing');
-        msg.ack();
-        return;
-      }
-      // 'running' — continue loop until deadline
+    if (status === 'complete') {
+      await onScanComplete(env, msg, scanId, siteId);
+      return;
     }
-    // Time's up — D1 state is persisted, resume in next invocation
-    msg.retry({ delaySeconds: 60 });
+    if (status === 'failed') {
+      await releaseSite(env, siteId, 'failed', 'Scan failed during processing');
+      msg.ack();
+      return;
+    }
+    // Still running — send a new message (attempts reset to 0) instead of retry
+    // (which would consume from the 100-retry cap). This allows unlimited batches.
+    await env.SCAN_QUEUE.send({ scanId, siteId });
+    msg.ack();
 
   } catch (err) {
     console.error(`Scan error [${scanId}]:`, err);
-    if (msg.attempts >= 20) {
-      await releaseSite(env, siteId, 'failed', `Error after 20 attempts: ${err.message}`);
-      msg.ack();
-    } else {
-      msg.retry({ delaySeconds: 60 });
-    }
+    // Unexpected errors use retry so failed messages land in the DLQ after 100 attempts
+    msg.retry({ delaySeconds: 10 });
   }
 }
 
