@@ -66,11 +66,31 @@ if ($wranglerContent.Contains("DATABASE_ID_PLACEHOLDER")) {
 }
 Write-Host ""
 
-# 4. Apply schema
+# 4. Apply schema (CREATE TABLE IF NOT EXISTS — always safe to re-run)
 Write-Host "Applying schema..." -ForegroundColor Yellow
 npx wrangler d1 execute webhealthreport --file=schema.sql --remote
 if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: Schema failed" -ForegroundColor Red; exit 1 }
 Write-Host "Schema applied" -ForegroundColor Green
+Write-Host ""
+
+# 4b. Apply column migrations (ALTER TABLE ADD COLUMN — skip silently if column already exists)
+Write-Host "Applying column migrations..." -ForegroundColor Yellow
+$migrations = @(
+    "ALTER TABLE crawl_queue ADD COLUMN anchor_text TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE crawl_queue ADD COLUMN claimed_at INTEGER",
+    "ALTER TABLE link_checks ADD COLUMN anchor_text TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE monitored_sites ADD COLUMN last_scan_status TEXT",
+    "ALTER TABLE monitored_sites ADD COLUMN last_scan_error TEXT"
+)
+foreach ($m in $migrations) {
+    $tmp = New-TemporaryFile
+    try {
+        Set-Content -Path $tmp.FullName -Value $m -Encoding UTF8
+        $null = npx wrangler d1 execute webhealthreport --file=$($tmp.FullName) --remote 2>&1
+    } catch { <# duplicate column — already applied #> }
+    finally { Remove-Item $tmp.FullName -ErrorAction SilentlyContinue }
+}
+Write-Host "Column migrations done" -ForegroundColor Green
 Write-Host ""
 
 # 5. Build
@@ -82,7 +102,7 @@ Write-Host ""
 
 # 6. Deploy
 Write-Host "Deploying to Cloudflare Pages..." -ForegroundColor Yellow
-npx wrangler pages deploy dist --project-name=webhealthreport
+npx wrangler pages deploy dist --project-name=webhealthreport --branch=production
 if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: Deploy failed" -ForegroundColor Red; exit 1 }
 
 Write-Host ""

@@ -2,24 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getScanStatus } from '../lib/api.js';
 
-const STEPS = [
-  'Starting scan',
-  'Checking homepage',
-  'Discovering pages',
-  'Crawling pages',
-  'Checking internal pages',
-  'Checking external links',
-  'Checking images',
-  'Analyzing issues',
-  'Building report',
-  'Complete',
-];
-
-function stepIndex(label) {
-  const idx = STEPS.findIndex(s => s.toLowerCase() === label?.toLowerCase());
-  return idx === -1 ? 1 : idx;
-}
-
 function statusColor(code) {
   if (code === null || code === undefined) return 'text-slate-400';
   if (code < 300) return 'text-green-600';
@@ -91,10 +73,7 @@ export default function ScanProgress() {
   }, [id, navigate]);
 
   const currentStep = status?.currentStep || 'Starting scan';
-  const stepIdx = stepIndex(currentStep);
-  const progress = status?.status === 'complete' ? 100 : Math.round((stepIdx / (STEPS.length - 1)) * 90);
   const recentChecks = status?.recentChecks || [];
-  const liveErrors = status?.liveErrors || [];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -116,8 +95,22 @@ export default function ScanProgress() {
             </div>
           ) : (
             <>
+              {/* Create account CTA — shown once scan is complete */}
+              {status?.status === 'complete' && (
+                <div className="card flex items-center justify-between gap-4 bg-brand-50 border border-brand-200">
+                  <div>
+                    <div className="font-semibold text-slate-800 text-sm">Want weekly health reports?</div>
+                    <div className="text-slate-500 text-xs mt-0.5">Create a free account to set up automatic monitoring.</div>
+                  </div>
+                  <a href="/register" className="btn-primary shrink-0 text-sm">Create account →</a>
+                </div>
+              )}
+
               {/* Main progress card */}
               <div className="card">
+                {status?.url && (
+                  <div className="text-sm text-slate-500 font-mono mb-3 truncate" title={status.url}>{status.url}</div>
+                )}
                 <div className="flex items-center gap-4 mb-4">
                   {status?.status !== 'complete' && (
                     <div className="w-8 h-8 shrink-0 rounded-full border-4 border-brand-100 border-t-brand-600 animate-spin" />
@@ -132,13 +125,6 @@ export default function ScanProgress() {
                   </div>
                 </div>
 
-                <div className="w-full bg-slate-100 rounded-full h-1.5 mb-4">
-                  <div
-                    className="bg-brand-600 h-1.5 rounded-full transition-all duration-500"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
                     <div className="text-2xl font-bold text-slate-800">{status?.pagesCrawled ?? '—'}</div>
@@ -149,38 +135,11 @@ export default function ScanProgress() {
                     <div className="text-xs text-slate-400 mt-0.5">Links checked</div>
                   </div>
                   <div>
-                    <div className={`text-2xl font-bold ${status?.issuesFound > 0 ? 'text-red-500' : 'text-slate-800'}`}>
-                      {status?.issuesFound ?? '—'}
-                    </div>
-                    <div className="text-xs text-slate-400 mt-0.5">
-                      {status?.errorsAreLive ? 'Errors seen' : 'Issues found'}
-                    </div>
+                    <div className="text-2xl font-bold text-slate-800">{status?.pendingCount ?? '—'}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">In queue</div>
                   </div>
                 </div>
               </div>
-
-              {/* Live errors panel */}
-              {liveErrors.length > 0 && (
-                <div className="card border-red-200 bg-red-50">
-                  <div className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-3">
-                    Errors found ({liveErrors.length})
-                  </div>
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {liveErrors.map((e, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs font-mono">
-                        <span className="font-bold w-8 shrink-0 text-red-500">{e.status}</span>
-                        <span className="text-slate-400 w-7 shrink-0">{typeLabel(e.type)}</span>
-                        <span className="text-slate-700 truncate flex-1" title={e.url}>{shortUrl(e.url)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {liveErrors.length > 0 && liveErrors[0].sourceUrl && (
-                    <div className="mt-2 pt-2 border-t border-red-200 text-xs text-red-400">
-                      Most recent found on: <span className="font-mono text-red-600">{shortUrl(liveErrors[0].sourceUrl)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Live URL feed */}
               {recentChecks.length > 0 && (
