@@ -5,7 +5,7 @@
  * CPU optimization notes:
  * - parseHtml uses targeted selectors instead of body-wide text handler
  * - No response.clone() — body is consumed once
- * - Links capped at 100 to limit normalization loop
+ * - Links capped at 250 to limit normalization loop
  */
 
 /**
@@ -119,6 +119,71 @@ export function normalizeImageUrl(urlStr, baseUrl) {
   }
 }
 
+/**
+ * Domains that serve only tracking pixels, analytics scripts, ad beacons, and
+ * similar resources with no link/page health value. URLs on these domains are
+ * skipped entirely — never queued for crawling or link checking.
+ */
+const TRACKING_DOMAINS = new Set([
+  // Google
+  'www.google-analytics.com', 'analytics.google.com', 'ssl.google-analytics.com',
+  'www.googletagmanager.com', 'googletagmanager.com',
+  'www.googleadservices.com', 'googleadservices.com',
+  'pagead2.googlesyndication.com', 'adservice.google.com',
+  'stats.g.doubleclick.net', 'doubleclick.net', 'cm.g.doubleclick.net',
+  // Meta / Facebook
+  'connect.facebook.net', 'www.facebook.com',
+  // Microsoft
+  'bat.bing.com', 'clarity.ms', 'www.clarity.ms',
+  // Adobe
+  'sc.omtrdc.net', 'assets.adobedtm.com',
+  // Hotjar
+  'static.hotjar.com', 'vars.hotjar.com', 'script.hotjar.com',
+  // Segment
+  'cdn.segment.com', 'api.segment.io',
+  // Amplitude
+  'cdn.amplitude.com', 'api.amplitude.com',
+  // Mixpanel
+  'cdn.mxpnl.com', 'cdn.mixpanel.com',
+  // Heap
+  'cdn.heapanalytics.com', 'heapanalytics.com',
+  // Intercom
+  'js.intercomcdn.com', 'widget.intercom.io', 'api-iam.intercom.io',
+  // LinkedIn
+  'px.ads.linkedin.com', 'snap.licdn.com',
+  // Twitter / X
+  'static.ads-twitter.com', 'analytics.twitter.com',
+  // HubSpot
+  'js.hs-scripts.com', 'js.hsforms.net', 'js.hscta.net', 'js.hs-analytics.net',
+  // Sentry / error tracking
+  'browser.sentry-cdn.com', 'js.sentry-cdn.com',
+  // Cloudflare Beacon
+  'static.cloudflareinsights.com',
+  // Cookiebot / consent banners
+  'consent.cookiebot.com', 'consentcdn.cookiebot.com',
+]);
+
+/**
+ * Path/filename patterns that indicate a tracking pixel or beacon.
+ * Matched against the URL pathname.
+ */
+const TRACKING_PATH_RE = /\/(blank|pixel|spacer|1x1|tracking|beacon|collect|tr|px)(\.gif|\.png|\.jpg|\.svg)?(\?|$)/i;
+
+/**
+ * Returns true if the URL is a known tracking/analytics resource that should be
+ * skipped during crawling and link checking.
+ */
+export function isTrackingUrl(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    if (TRACKING_DOMAINS.has(u.hostname)) return true;
+    if (TRACKING_PATH_RE.test(u.pathname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export function getBaseDomain(urlStr) {
   try {
     return new URL(urlStr).hostname.toLowerCase();
@@ -163,7 +228,7 @@ function parseSrcset(srcset) {
     .filter(u => u && !u.startsWith('data:'));
 }
 
-export async function parseHtml(response) {
+export async function parseHtml(response, maxLinks = MAX_LINKS_PER_PAGE, maxImages = MAX_IMAGES_PER_PAGE) {
   const links = []; // [{href, text}]
   const imageSrcs = new Set(); // deduplicate image URLs within a page
   const images = []; // [{src, alt}]
@@ -173,7 +238,7 @@ export async function parseHtml(response) {
   let curAlt = '';
 
   function addImage(src, alt) {
-    if (images.length >= MAX_IMAGES_PER_PAGE) return;
+    if (images.length >= maxImages) return;
     if (!src || src.startsWith('data:') || imageSrcs.has(src)) return;
     imageSrcs.add(src);
     images.push({ src, alt: (alt || '').trim().slice(0, 100) });
@@ -187,7 +252,7 @@ export async function parseHtml(response) {
     })
     .on('a[href]', {
       element(el) {
-        if (links.length >= MAX_LINKS_PER_PAGE) { curIdx = -1; return; }
+        if (links.length >= maxLinks) { curIdx = -1; return; }
         const href = decodeHtmlEntities(el.getAttribute('href'));
         if (href && !href.startsWith('mailto:') && !href.startsWith('tel:') &&
             !href.startsWith('javascript:') && !href.startsWith('#')) {

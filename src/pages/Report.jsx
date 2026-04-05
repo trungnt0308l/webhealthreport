@@ -329,6 +329,13 @@ export default function Report() {
     }
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (report?.baseDomain) {
+      document.title = `Health Report: ${report.baseDomain} — Website Health Report`;
+      return () => { document.title = 'Website Health Report — Free Website Scanner'; };
+    }
+  }, [report?.baseDomain]);
+
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -356,11 +363,14 @@ export default function Report() {
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <div className="w-7 h-7 bg-brand-600 rounded-md flex items-center justify-center text-white font-bold text-sm">W</div>
             <span className="font-semibold text-slate-800">Website Health Report</span>
-          </div>
-          <Link to="/" className="text-sm text-brand-600 hover:underline">← New scan</Link>
+          </Link>
+          <nav className="flex items-center gap-5 text-sm">
+            <Link to="/faq" className="text-slate-500 hover:text-slate-800 transition-colors hidden sm:inline">FAQ</Link>
+            <Link to="/" className="text-brand-600 hover:underline">← New scan</Link>
+          </nav>
         </div>
       </header>
 

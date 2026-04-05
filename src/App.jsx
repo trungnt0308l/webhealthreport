@@ -6,6 +6,7 @@ import Report from './pages/Report.jsx';
 import Monitor from './pages/Monitor.jsx';
 import Register from './pages/Register.jsx';
 import Account from './pages/Account.jsx';
+import FAQ from './pages/FAQ.jsx';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/scan/:id" element={<ScanProgress />} />
           <Route path="/report/:id" element={<Report />} />
+          <Route path="/faq" element={<FAQ />} />
           <Route path="/monitor" element={<Monitor />} />
           <Route path="/register" element={<Register />} />
           <Route

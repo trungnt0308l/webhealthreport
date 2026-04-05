@@ -22,6 +22,8 @@ export async function bootstrapScan(env, scanId, rawUrl, baseDomain, siteId = nu
 
   const resolvedBaseDomain = baseDomain || getBaseDomain(normalizedStart);
   const now = Math.floor(Date.now() / 1000);
+  const maxLinksPerPage = siteId ? 250 : 50;
+  const maxImagesPerPage = siteId ? 250 : 100;
 
   // Upsert: INSERT for the HTTP path (no pre-existing record), UPDATE for the scheduler
   // path (stub was pre-inserted to satisfy the FK on monitored_sites.pending_scan_id).
@@ -49,7 +51,7 @@ export async function bootstrapScan(env, scanId, rawUrl, baseDomain, siteId = nu
     let images = [];
 
     if (isHtmlContentType(contentType) && statusCode < 400) {
-      const parsed = await parseHtml(response);
+      const parsed = await parseHtml(response, maxLinksPerPage, maxImagesPerPage);
       title = parsed.title;
       visibleTextLength = parsed.visibleTextLength;
       links = parsed.links;

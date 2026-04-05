@@ -3,9 +3,57 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Website Health Report — Scan Your Site</title>
-    <meta name="description" content="Enter your URL, watch the scan live, and get a professional report showing broken links, missing pages, and the website issues that matter most." />
+
+    <!-- Primary meta -->
+    <title>Website Health Report — Free Website Scanner</title>
+    <meta name="description" content="Scan your website for broken links, missing pages, and technical issues in minutes. Free, no account required. Checks up to 1,000 pages and 10,000 links." />
+    <link rel="canonical" href="https://webhealthreport.pages.dev/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://webhealthreport.pages.dev/" />
+    <meta property="og:title" content="Website Health Report — Free Website Scanner" />
+    <meta property="og:description" content="Scan your website for broken links, missing pages, and technical issues in minutes. Free, no account required." />
+    <meta property="og:site_name" content="Website Health Report" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Website Health Report — Free Website Scanner" />
+    <meta name="twitter:description" content="Scan your website for broken links, missing pages, and technical issues in minutes. Free, no account required." />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://webhealthreport.pages.dev/#organization",
+          "name": "Website Health Report",
+          "url": "https://webhealthreport.pages.dev/"
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://webhealthreport.pages.dev/#website",
+          "url": "https://webhealthreport.pages.dev/",
+          "name": "Website Health Report",
+          "description": "Free website scanner for broken links, missing pages, and technical issues",
+          "publisher": { "@id": "https://webhealthreport.pages.dev/#organization" }
+        }
+      ]
+    }
+    </script>
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Define the Turnstile callback synchronously so it exists even if the script loads before React mounts -->
+    <script>
+      window.onloadTurnstileCallback = function() {
+        window._turnstileReady = true;
+        if (typeof window._pendingTurnstileRender === 'function') {
+          window._pendingTurnstileRender();
+        }
+      };
+    </script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" async defer></script>
   </head>
   <body>

@@ -4,16 +4,17 @@
  *
  * Returns { status: 'running'|'complete'|'failed', recentChecks: [] }
  */
-import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInternalUrl, isHtmlContentType } from './crawl.js';
+import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInternalUrl, isHtmlContentType, isTrackingUrl } from './crawl.js';
 import { checkBatch, fetchPage } from './checker.js';
 import { detectIssues } from './issues.js';
 
-const HTML_BATCH_SIZE = 10;
+const HTML_BATCH_SIZE = 5;
 const HEAD_BATCH_SIZE = 10;
-const MAX_PAGES = 1000;
-const MAX_LINKS = 10000;
 const MAX_DEPTH = 5;
-const D1_CHUNK = 30;
+const D1_CHUNK = 100;
+
+const FREE_LIMITS    = { maxPages: 300,  maxLinks: 5000,  maxLinksPerPage: 50,  maxImagesPerPage: 100 };
+const PREMIUM_LIMITS = { maxPages: 1000, maxLinks: 10000, maxLinksPerPage: 250, maxImagesPerPage: 250 };
 const BOT_BLOCKED_STATUSES = new Set([403, 426, 429, 526, 530, 999]);
 
 async function batchAll(env, stmts) {
@@ -72,7 +73,7 @@ async function finalize(env, scan, scanId, siteId = null) {
   const internalSourceMap = new Map(
     (internalSourcesResult.results || []).map(r => [r.normalized_target_url, r.source_url])
   );
-  const issues = detectIssues(scanId, pageList, linkCheckList, internalSourceMap);
+  const issues = detectIssues(scanId, pageList, linkCheckList, internalSourceMap, scan.base_domain);
 
   if (issues.length > 0) {
     await batchAll(env, issues.map(i =>
@@ -107,6 +108,8 @@ export async function processBatch(env, scanId, siteId = null) {
     return { status: scan.status, recentChecks: [] };
   }
 
+  const LIMITS = scan.site_id ? PREMIUM_LIMITS : FREE_LIMITS;
+
   // Reset stale 'processing' items (> 10 min) — handles scheduler Worker restarts
   await env.DB.prepare(
     `UPDATE crawl_queue SET status = 'pending', claimed_at = NULL
@@ -116,12 +119,12 @@ export async function processBatch(env, scanId, siteId = null) {
   const linksCounted = scan.links_checked || 0;
   const pagesCounted = scan.pages_crawled || 0;
 
-  if (pagesCounted >= MAX_PAGES || linksCounted >= MAX_LINKS) {
+  if (pagesCounted >= LIMITS.maxPages || linksCounted >= LIMITS.maxLinks) {
     await finalize(env, scan, scanId, siteId);
     return { status: 'complete', recentChecks: [] };
   }
 
-  const htmlLimit = pagesCounted < MAX_PAGES ? HTML_BATCH_SIZE : 0;
+  const htmlLimit = pagesCounted < LIMITS.maxPages ? HTML_BATCH_SIZE : 0;
   const [htmlBatch, headBatch] = await Promise.all([
     htmlLimit > 0
       ? env.DB.prepare(
@@ -175,7 +178,7 @@ export async function processBatch(env, scanId, siteId = null) {
       let images = [];
 
       if (isHtmlContentType(contentType) && statusCode < 400) {
-        const parsed = await parseHtml(response);
+        const parsed = await parseHtml(response, LIMITS.maxLinksPerPage, LIMITS.maxImagesPerPage);
         title = parsed.title;
         visibleTextLength = parsed.visibleTextLength;
         links = parsed.links;
@@ -216,7 +219,7 @@ export async function processBatch(env, scanId, siteId = null) {
     if (newDepth <= MAX_DEPTH) {
       for (const { href, text } of r.links) {
         const norm = normalizeUrl(href, r.finalUrl);
-        if (!norm || seen.has(norm)) continue;
+        if (!norm || seen.has(norm) || isTrackingUrl(norm)) continue;
         seen.add(norm);
         try {
           const u = new URL(norm);
@@ -234,7 +237,7 @@ export async function processBatch(env, scanId, siteId = null) {
       }
       for (const { src, alt } of r.images) {
         const norm = normalizeImageUrl(src, r.finalUrl);
-        if (!norm || seen.has(norm)) continue;
+        if (!norm || seen.has(norm) || isTrackingUrl(norm)) continue;
         seen.add(norm);
         try {
           const u = new URL(norm);
@@ -251,7 +254,7 @@ export async function processBatch(env, scanId, siteId = null) {
   let headResults = [];
   if (headItems.length > 0) {
     headResults = await checkBatch(headItems.map(i => ({
-      url: i.normalized_url,
+      url: i.url,
       normalized_url: i.normalized_url,
       url_type: i.url_type,
       source_url: i.source_url || scan.url,

@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+Disallow: /scan/
+Disallow: /report/
+Disallow: /account
+Disallow: /monitor
+
+Sitemap: https://webhealthreport.pages.dev/sitemap.xml

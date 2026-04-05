@@ -11,7 +11,7 @@ function pushTo(map, key, val) {
   map.get(key).push(val);
 }
 
-export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null) {
+export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null, baseDomain = null) {
   const issues = [];
 
   // Single pass over linkChecks — build four grouped Maps simultaneously
@@ -93,7 +93,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
       recommended_action: 'Update the link to point directly to the final destination URL.',
       affected_count: srcs.length,
       target_url: target,
-      example_json: JSON.stringify({ target, finalUrl: srcs[0].final_url, redirectCount: srcs[0].redirect_count }),
+      example_json: JSON.stringify({ target, finalUrl: srcs[0].final_url, redirectCount: srcs[0].redirect_count, sources: srcs.slice(0, 3).map(s => s.source_url) }),
     });
   }
 
@@ -122,7 +122,12 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
 
   // ---- Homepage unavailable ----
   const homepage = pages.find(p => {
-    try { return new URL(p.url).pathname === '/' || new URL(p.url).pathname === ''; } catch { return false; }
+    try {
+      const u = new URL(p.url);
+      if (u.pathname !== '/' && u.pathname !== '') return false;
+      if (baseDomain && u.hostname !== baseDomain) return false;
+      return true;
+    } catch { return false; }
   });
   if (homepage && homepage.status_code !== null && homepage.status_code >= 400) {
     issues.push({

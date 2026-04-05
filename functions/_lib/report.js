@@ -53,7 +53,7 @@ export async function generateReport(env, scanId, scan, issues, pageList, siteId
       recommendedAction: i.recommended_action,
       affectedCount: i.affected_count,
       targetUrl: i.target_url || null,
-      firstDetectedAt: scan.finished_at,
+      firstDetectedAt: null,
       example: i.example_json ? JSON.parse(i.example_json) : null,
     })),
     pages: pageList.map(p => ({
