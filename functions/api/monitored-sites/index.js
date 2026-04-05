@@ -1,77 +1,76 @@
 /**
- * GET  /api/monitored-sites?key=<MONITOR_SECRET> — list all monitored sites
- * POST /api/monitored-sites?key=<MONITOR_SECRET> — add a site
+ * GET  /api/monitored-sites — list all monitored sites (admin)
+ * POST /api/monitored-sites — add a site (admin)
  *   Body: { url: string, emails: string[] }
  */
 import { normalizeUrl, getBaseDomain } from '../../_lib/crawl.js';
+import { adminAuthCheck } from '../../_lib/monitor-auth.js';
+import { getAllowedOrigin } from '../../_lib/cors.js';
 
-function json(data, status = 200) {
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function json(request, env, data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
+      'X-Content-Type-Options': 'nosniff',
+    },
   });
 }
 
-function authCheck(request, env) {
-  const auth = request.headers.get('Authorization') || '';
-  const key = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!key || !env.MONITOR_SECRET || key !== env.MONITOR_SECRET) {
-    return json({ error: 'Access denied' }, 403);
-  }
-  return null;
-}
-
-export async function onRequestOptions() {
+export function onRequestOptions({ request, env }) {
   return new Response(null, {
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
 }
 
 export async function onRequestGet({ request, env }) {
-  const denied = authCheck(request, env);
+  const denied = adminAuthCheck(request, env, (d, s) => json(request, env, d, s));
   if (denied) return denied;
 
   const result = await env.DB.prepare(
     `SELECT id, url, base_domain, emails, last_scan_id, pending_scan_id, next_scan_at, created_at,
-            last_scan_status, last_scan_error
+            last_scan_status, last_scan_error, user_id
      FROM monitored_sites ORDER BY created_at DESC`
   ).all();
 
-  return json({ sites: result.results || [] });
+  return json(request, env, { sites: result.results || [] });
 }
 
 export async function onRequestPost({ request, env }) {
-  const denied = authCheck(request, env);
+  const denied = adminAuthCheck(request, env, (d, s) => json(request, env, d, s));
   if (denied) return denied;
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return json({ error: 'Invalid JSON' }, 400);
+    return json(request, env, { error: 'Invalid JSON' }, 400);
   }
 
   const { url: rawUrl, emails } = body;
-  if (!rawUrl) return json({ error: 'url is required' }, 400);
-  if (!Array.isArray(emails) || emails.length === 0) return json({ error: 'emails must be a non-empty array' }, 400);
+  if (!rawUrl) return json(request, env, { error: 'url is required' }, 400);
+  if (!Array.isArray(emails) || emails.length === 0) return json(request, env, { error: 'emails must be a non-empty array' }, 400);
 
-  const invalidEmail = emails.find(e => typeof e !== 'string' || !e.includes('@'));
-  if (invalidEmail !== undefined) return json({ error: 'Invalid email address: ' + invalidEmail }, 400);
+  const invalidEmail = emails.find(e => typeof e !== 'string' || !EMAIL_RE.test(e.trim()));
+  if (invalidEmail !== undefined) return json(request, env, { error: 'Invalid email address: ' + invalidEmail }, 400);
 
   let startUrl;
   try {
     startUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
     new URL(startUrl);
   } catch {
-    return json({ error: 'Invalid URL' }, 400);
+    return json(request, env, { error: 'Invalid URL' }, 400);
   }
 
   const normalizedStart = normalizeUrl(startUrl, startUrl);
-  if (!normalizedStart) return json({ error: 'Could not normalize URL' }, 400);
+  if (!normalizedStart) return json(request, env, { error: 'Could not normalize URL' }, 400);
 
   const baseDomain = getBaseDomain(normalizedStart);
   const id = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
@@ -84,5 +83,5 @@ export async function onRequestPost({ request, env }) {
      VALUES (?, ?, ?, ?, ?, ?)`
   ).bind(id, startUrl, baseDomain, JSON.stringify(emails), nextScanAt, now).run();
 
-  return json({ id }, 201);
+  return json(request, env, { id }, 201);
 }

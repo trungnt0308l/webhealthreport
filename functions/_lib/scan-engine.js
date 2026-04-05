@@ -22,7 +22,7 @@ async function batchAll(env, stmts) {
   }
 }
 
-async function finalize(env, scan, scanId) {
+async function finalize(env, scan, scanId, siteId = null) {
   const now = Math.floor(Date.now() / 1000);
   await env.DB.prepare(`UPDATE scans SET current_step = 'Analyzing issues' WHERE id = ?`).bind(scanId).run();
 
@@ -77,10 +77,19 @@ async function finalize(env, scan, scanId) {
   if (issues.length > 0) {
     await batchAll(env, issues.map(i =>
       env.DB.prepare(
-        `INSERT OR IGNORE INTO issues (scan_id, issue_type, severity, fingerprint, title, explanation, recommended_action, affected_count, example_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(i.scan_id, i.issue_type, i.severity, i.fingerprint, i.title, i.explanation, i.recommended_action, i.affected_count, i.example_json)
+        `INSERT OR IGNORE INTO issues (scan_id, issue_type, severity, fingerprint, title, explanation, recommended_action, affected_count, example_json, target_url)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(i.scan_id, i.issue_type, i.severity, i.fingerprint, i.title, i.explanation, i.recommended_action, i.affected_count, i.example_json, i.target_url ?? '')
     ));
+
+    if (siteId) {
+      await batchAll(env, issues.map(i =>
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO issue_history (site_id, issue_type, target_url, first_detected_at)
+           VALUES (?, ?, ?, ?)`
+        ).bind(siteId, i.issue_type, i.target_url ?? '', now)
+      ));
+    }
   }
 
   await env.DB.prepare(
@@ -90,7 +99,7 @@ async function finalize(env, scan, scanId) {
   await env.DB.prepare('DELETE FROM crawl_queue WHERE scan_id = ?').bind(scanId).run();
 }
 
-export async function processBatch(env, scanId) {
+export async function processBatch(env, scanId, siteId = null) {
   const scan = await env.DB.prepare('SELECT * FROM scans WHERE id = ?').bind(scanId).first();
   if (!scan) throw new Error(`Scan not found: ${scanId}`);
 
@@ -108,7 +117,7 @@ export async function processBatch(env, scanId) {
   const pagesCounted = scan.pages_crawled || 0;
 
   if (pagesCounted >= MAX_PAGES || linksCounted >= MAX_LINKS) {
-    await finalize(env, scan, scanId);
+    await finalize(env, scan, scanId, siteId);
     return { status: 'complete', recentChecks: [] };
   }
 
@@ -143,7 +152,7 @@ export async function processBatch(env, scanId) {
   const items = [...htmlItems, ...headItems];
 
   if (items.length === 0) {
-    await finalize(env, scan, scanId);
+    await finalize(env, scan, scanId, siteId);
     return { status: 'complete', recentChecks: [] };
   }
 

@@ -50,6 +50,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
       explanation: `${srcs.length} page${srcs.length > 1 ? 's link' : ' links'} to this internal URL but it returns a ${srcs[0].response_status} error.`,
       recommended_action: 'Update or remove the link, or restore the missing page.',
       affected_count: srcs.length,
+      target_url: target,
       example_json: JSON.stringify({
         target,
         anchorText: srcs[0].anchor_text || '',
@@ -71,6 +72,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
         : `This image is missing (${srcs[0].response_status}) and appears broken on ${srcs.length} page${srcs.length > 1 ? 's' : ''}.`,
       recommended_action: 'Re-upload the image or update the reference to a valid URL.',
       affected_count: srcs.length,
+      target_url: target,
       example_json: JSON.stringify({
         target,
         anchorText: srcs[0].anchor_text || '',
@@ -90,6 +92,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
       explanation: `This link goes through ${srcs[0].redirect_count} redirects before reaching its destination. Chains slow down pages and waste link equity.`,
       recommended_action: 'Update the link to point directly to the final destination URL.',
       affected_count: srcs.length,
+      target_url: target,
       example_json: JSON.stringify({ target, finalUrl: srcs[0].final_url, redirectCount: srcs[0].redirect_count }),
     });
   }
@@ -107,6 +110,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
         : `This external link returns a ${srcs[0].response_status} error. Visitors who click it will see an error.`,
       recommended_action: 'Remove or replace this external link.',
       affected_count: srcs.length,
+      target_url: target,
       example_json: JSON.stringify({
         target,
         anchorText: srcs[0].anchor_text || '',
@@ -130,6 +134,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
       explanation: `Your homepage returned a ${homepage.status_code} error. Visitors and search engines cannot access your site.`,
       recommended_action: 'Restore the homepage immediately — this is your most critical issue.',
       affected_count: 1,
+      target_url: homepage.url,
       example_json: JSON.stringify({ url: homepage.url, status: homepage.status_code }),
     });
   }
@@ -148,6 +153,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
         explanation: 'This page is missing a <title> tag. Titles help search engines and users understand what the page is about.',
         recommended_action: 'Add a descriptive title tag to this page.',
         affected_count: 1,
+        target_url: page.url,
         example_json: JSON.stringify({ url: page.url }),
       });
     }
@@ -166,6 +172,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
         explanation: `This page has very little visible text (${page.text_length} characters). It may appear blank or unhelpful to visitors.`,
         recommended_action: 'Add meaningful content to this page or remove it if it is no longer needed.',
         affected_count: 1,
+        target_url: page.url,
         example_json: JSON.stringify({ url: page.url, textLength: page.text_length, sources: incoming ? [incoming.source_url] : [] }),
       });
     }
@@ -180,6 +187,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
         explanation: `This page took ${(page.response_ms / 1000).toFixed(1)}s to respond, which may frustrate visitors.`,
         recommended_action: 'Investigate server performance, caching, or hosting for this page.',
         affected_count: 1,
+        target_url: page.url,
         example_json: JSON.stringify({ url: page.url, responseMs: page.response_ms }),
       });
     }

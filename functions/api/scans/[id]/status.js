@@ -3,21 +3,22 @@
  * Returns current progress. Also processes a batch of pending queue items.
  */
 import { processBatch } from '../../../_lib/scan-engine.js';
+import { getAllowedOrigin } from '../../../_lib/cors.js';
 
-function cors(response) {
-  const r = new Response(response.body, response);
-  r.headers.set('Access-Control-Allow-Origin', '*');
-  return r;
+function corsResponse(request, env, body, init = {}) {
+  const headers = new Headers(init.headers || {});
+  headers.set('Access-Control-Allow-Origin', getAllowedOrigin(request, env));
+  headers.set('Content-Type', 'application/json');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  return new Response(body, { ...init, headers });
 }
 
-export async function onRequestGet({ params, env }) {
+export async function onRequestGet({ params, request, env }) {
   const { id: scanId } = params;
 
   const scan = await env.DB.prepare('SELECT * FROM scans WHERE id = ?').bind(scanId).first();
   if (!scan) {
-    return cors(new Response(JSON.stringify({ error: 'Scan not found' }), {
-      status: 404, headers: { 'Content-Type': 'application/json' },
-    }));
+    return corsResponse(request, env, JSON.stringify({ error: 'Scan not found' }), { status: 404 });
   }
 
   let recentChecks = [];
@@ -28,7 +29,7 @@ export async function onRequestGet({ params, env }) {
 
   const updated = await env.DB.prepare('SELECT * FROM scans WHERE id = ?').bind(scanId).first();
   const resp = await buildProgressResponse(env, updated, recentChecks);
-  return cors(new Response(JSON.stringify(resp), { headers: { 'Content-Type': 'application/json' } }));
+  return corsResponse(request, env, JSON.stringify(resp));
 }
 
 async function buildProgressResponse(env, scan, recentChecks = []) {

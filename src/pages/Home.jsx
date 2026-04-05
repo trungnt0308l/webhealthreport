@@ -1,9 +1,46 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { startScan } from '../lib/api.js';
 
+// Cloudflare Turnstile site key (public — safe to hardcode).
+// Uses the test key locally; replace with your real site key from dash.cloudflare.com > Turnstile.
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '0x4AAAAAAC049iVS5wZ82lGw';
+
+function TurnstileWidget({ onVerify, onExpire }) {
+  const containerRef = useRef(null);
+  const widgetId = useRef(null);
+
+  useEffect(() => {
+    function renderWidget() {
+      if (!containerRef.current || widgetId.current !== null) return;
+      widgetId.current = window.turnstile.render(containerRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        theme: 'light',
+        callback: onVerify,
+        'expired-callback': onExpire,
+      });
+    }
+
+    if (window.turnstile) {
+      renderWidget();
+    } else {
+      window.onloadTurnstileCallback = renderWidget;
+    }
+
+    return () => {
+      if (widgetId.current !== null && window.turnstile) {
+        window.turnstile.remove(widgetId.current);
+        widgetId.current = null;
+      }
+    };
+  }, []);
+
+  return <div ref={containerRef} className="mt-4 flex justify-center" />;
+}
+
 export default function Home() {
   const [url, setUrl] = useState('');
+  const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -12,13 +49,20 @@ export default function Home() {
     e.preventDefault();
     setError('');
     if (!url.trim()) return;
+    if (!token) {
+      setError('Please complete the security check.');
+      return;
+    }
 
     setLoading(true);
     try {
-      const { scanId } = await startScan(url.trim());
+      const { scanId } = await startScan(url.trim(), token);
       navigate(`/scan/${scanId}`);
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');
+      // Reset Turnstile so user can retry
+      if (window.turnstile) window.turnstile.reset();
+      setToken('');
       setLoading(false);
     }
   }
@@ -44,23 +88,30 @@ export default function Home() {
             missing pages, and the issues that matter most.
           </p>
 
-          <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              placeholder="https://yourwebsite.com"
-              className="flex-1 border border-slate-300 rounded-lg px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-              disabled={loading}
-              autoFocus
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                placeholder="https://yourwebsite.com"
+                className="flex-1 border border-slate-300 rounded-lg px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                disabled={loading}
+                autoFocus
+              />
+              <button
+                type="submit"
+                disabled={loading || !url.trim() || !token}
+                className="btn-primary whitespace-nowrap"
+              >
+                {loading ? 'Starting…' : 'Scan my site →'}
+              </button>
+            </div>
+
+            <TurnstileWidget
+              onVerify={setToken}
+              onExpire={() => setToken('')}
             />
-            <button
-              type="submit"
-              disabled={loading || !url.trim()}
-              className="btn-primary whitespace-nowrap"
-            >
-              {loading ? 'Starting…' : 'Scan my site →'}
-            </button>
           </form>
 
           {error && (

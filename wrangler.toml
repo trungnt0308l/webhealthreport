@@ -8,5 +8,8 @@ database_name = "webhealthreport"
 database_id = "c379e50c-5790-46da-88fa-83c5b82ebeb0"
 
 [vars]
-AUTH0_DOMAIN   = "dev-fu1c3ghemmnxzhop.us.auth0.com"
-AUTH0_AUDIENCE = "https://webhealthreport.pages.dev/api"
+AUTH0_DOMAIN        = "dev-fu1c3ghemmnxzhop.us.auth0.com"
+AUTH0_AUDIENCE      = "https://webhealthreport.pages.dev/api"
+ALLOWED_ORIGIN      = "https://webhealthreport.pages.dev"
+# TURNSTILE_SITE_KEY  = "your_site_key"   # add this for production (also set in Pages env vars for the frontend build)
+# TURNSTILE_SECRET_KEY — wrangler secret put TURNSTILE_SECRET_KEY

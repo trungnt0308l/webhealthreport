@@ -11,10 +11,11 @@ import { fetchPage } from './checker.js';
  * @param {string} scanId      - Pre-generated scan ID
  * @param {string} rawUrl      - Raw URL from user/stored site (with or without protocol)
  * @param {string} [baseDomain] - Pre-computed base domain; derived from URL if omitted
+ * @param {string} [siteId]    - Monitored site ID, if this scan belongs to one
  * @returns {{ homepageOk: boolean }}
  * @throws on network failure or DB error
  */
-export async function bootstrapScan(env, scanId, rawUrl, baseDomain) {
+export async function bootstrapScan(env, scanId, rawUrl, baseDomain, siteId = null) {
   const startUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
   const normalizedStart = normalizeUrl(startUrl, startUrl);
   if (!normalizedStart) throw new Error('Could not normalize URL: ' + rawUrl);
@@ -25,16 +26,17 @@ export async function bootstrapScan(env, scanId, rawUrl, baseDomain) {
   // Upsert: INSERT for the HTTP path (no pre-existing record), UPDATE for the scheduler
   // path (stub was pre-inserted to satisfy the FK on monitored_sites.pending_scan_id).
   await env.DB.prepare(
-    `INSERT INTO scans (id, url, normalized_start_url, base_domain, status, started_at, current_step)
-     VALUES (?, ?, ?, ?, 'running', ?, 'Checking homepage')
+    `INSERT INTO scans (id, url, normalized_start_url, base_domain, site_id, status, started_at, current_step)
+     VALUES (?, ?, ?, ?, ?, 'running', ?, 'Checking homepage')
      ON CONFLICT(id) DO UPDATE SET
        url = excluded.url,
        normalized_start_url = excluded.normalized_start_url,
        base_domain = excluded.base_domain,
+       site_id = excluded.site_id,
        status = 'running',
        started_at = excluded.started_at,
        current_step = 'Checking homepage'`
-  ).bind(scanId, startUrl, normalizedStart, resolvedBaseDomain, now).run();
+  ).bind(scanId, startUrl, normalizedStart, resolvedBaseDomain, siteId, now).run();
 
   let homepageOk = true;
   try {

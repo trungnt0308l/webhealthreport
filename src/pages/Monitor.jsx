@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getMonitoredSites, addMonitoredSite, removeMonitoredSite } from '../lib/api.js';
-
-const SESSION_KEY = 'monitor_key';
+import { getMonitoredSites, addMonitoredSite, removeMonitoredSite, updateMonitoredSiteEmails } from '../lib/api.js';
 
 function formatDate(unixTs) {
   if (!unixTs) return '—';
@@ -36,7 +34,6 @@ function LoginForm({ onSuccess }) {
     setLoading(true);
     try {
       await getMonitoredSites(k);
-      sessionStorage.setItem(SESSION_KEY, k);
       onSuccess(k);
     } catch (err) {
       setError(err.status === 403 ? 'Invalid key.' : 'Could not connect. Try again.');
@@ -69,6 +66,61 @@ function LoginForm({ onSuccess }) {
           </form>
         </div>
       </main>
+    </div>
+  );
+}
+
+function EmailEditCell({ siteId, emails, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(emails.join(', '));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSave() {
+    setError('');
+    const list = value.split(',').map(s => s.trim()).filter(Boolean);
+    if (list.length === 0) { setError('Enter at least one email.'); return; }
+    setSaving(true);
+    try {
+      await onSave(siteId, list);
+      setEditing(false);
+    } catch (err) {
+      setError(err.message || 'Failed to save.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCancel() {
+    setValue(emails.join(', '));
+    setError('');
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-slate-500 text-xs truncate" title={emails.join(', ')}>{emails.join(', ')}</span>
+        <button onClick={() => setEditing(true)} className="text-xs text-brand-600 hover:underline shrink-0">Edit</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          className="border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 w-64"
+          disabled={saving}
+          autoFocus
+        />
+        <button onClick={handleSave} disabled={saving} className="text-xs btn-primary px-2 py-1">{saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={handleCancel} disabled={saving} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+      </div>
+      {error && <p className="text-red-600 text-xs">{error}</p>}
     </div>
   );
 }
@@ -125,10 +177,15 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
     }
   }
 
+  async function handleSaveEmails(id, emails) {
+    await updateMonitoredSiteEmails(monitorKey, id, emails);
+    setSites(prev => prev.map(s => s.id === id ? { ...s, emails: JSON.stringify(emails) } : s));
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Header />
-      <main className="flex-1 max-w-5xl w-full mx-auto px-6 py-8 space-y-6">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-6">
 
         {/* Add site form */}
         <div className="card">
@@ -180,6 +237,7 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
                 <thead>
                   <tr className="bg-slate-50 text-xs text-slate-500 font-medium uppercase tracking-wide">
                     <th className="text-left px-5 py-2.5">Domain</th>
+                    <th className="text-left px-5 py-2.5">User</th>
                     <th className="text-left px-5 py-2.5">Emails</th>
                     <th className="text-left px-5 py-2.5">Status</th>
                     <th className="text-left px-5 py-2.5">Next scan</th>
@@ -192,11 +250,16 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
                     const emails = JSON.parse(site.emails || '[]');
                     return (
                       <tr key={site.id} className="border-t border-slate-100 hover:bg-slate-50">
-                        <td className="px-5 py-3 font-mono text-xs text-slate-700 max-w-[200px] truncate" title={site.url}>
+                        <td className="px-5 py-3 font-mono text-xs text-slate-700 max-w-[160px] truncate" title={site.url}>
                           {site.base_domain}
                         </td>
-                        <td className="px-5 py-3 text-slate-500 text-xs max-w-[220px] truncate" title={emails.join(', ')}>
-                          {emails.join(', ')}
+                        <td className="px-5 py-3 text-xs max-w-[160px] truncate">
+                          {site.user_id
+                            ? <span className="text-slate-600" title={site.user_id}>{site.user_id.length > 20 ? site.user_id.slice(0, 20) + '…' : site.user_id}</span>
+                            : <span className="text-slate-400 italic">Admin</span>}
+                        </td>
+                        <td className="px-5 py-3 max-w-[260px]">
+                          <EmailEditCell siteId={site.id} emails={emails} onSave={handleSaveEmails} />
                         </td>
                         <td className="px-5 py-3 whitespace-nowrap">
                           {site.pending_scan_id
@@ -239,10 +302,9 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
 }
 
 export default function Monitor() {
-  const [monitorKey, setMonitorKey] = useState(() => sessionStorage.getItem(SESSION_KEY) || '');
+  const [monitorKey, setMonitorKey] = useState('');
 
   function handleSignOut() {
-    sessionStorage.removeItem(SESSION_KEY);
     setMonitorKey('');
   }
 

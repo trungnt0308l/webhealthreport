@@ -65,9 +65,9 @@ async function launchDueScans(env) {
     // Pre-insert a scan stub so the FK on monitored_sites.pending_scan_id is satisfied
     // before we set it. bootstrapScan will upsert over this stub with real data.
     await env.DB.prepare(
-      `INSERT INTO scans (id, url, normalized_start_url, base_domain, status, started_at, current_step)
-       VALUES (?, ?, ?, ?, 'pending', ?, 'Queued')`
-    ).bind(scanId, site.url, site.url, site.base_domain, now).run();
+      `INSERT INTO scans (id, url, normalized_start_url, base_domain, site_id, status, started_at, current_step)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, 'Queued')`
+    ).bind(scanId, site.url, site.url, site.base_domain, site.id, now).run();
 
     // Atomic claim — only one cron invocation wins per site
     const claim = await env.DB.prepare(
@@ -82,7 +82,7 @@ async function launchDueScans(env) {
     }
 
     try {
-      await bootstrapScan(env, scanId, site.url, site.base_domain);
+      await bootstrapScan(env, scanId, site.url, site.base_domain, site.id);
     } catch (err) {
       console.error(`Bootstrap failed for ${site.url}:`, err);
       await releaseSite(env, site.id, 'failed', `Bootstrap error: ${err.message}`);
@@ -107,7 +107,7 @@ async function runScan(env, msg) {
   // One processBatch call per invocation — keeps subrequest count well within
   // Cloudflare's per-invocation limit.
   try {
-    const { status } = await processBatch(env, scanId);
+    const { status } = await processBatch(env, scanId, siteId);
 
     if (status === 'complete') {
       await onScanComplete(env, msg, scanId, siteId);
@@ -131,18 +131,8 @@ async function runScan(env, msg) {
 }
 
 async function onScanComplete(env, msg, scanId, siteId) {
-  // Ensure report exists (generated during finalize, but regenerate if missing)
-  let row = await env.DB.prepare(
-    `SELECT rendered_summary_json FROM reports WHERE scan_id = ? AND report_type = 'browser'`
-  ).bind(scanId).first();
-  if (!row) {
-    await generateReport(env, scanId, null, null, null);
-    row = await env.DB.prepare(
-      `SELECT rendered_summary_json FROM reports WHERE scan_id = ? AND report_type = 'browser'`
-    ).bind(scanId).first();
-  }
-
-  const report = JSON.parse(row.rendered_summary_json);
+  // Generate report with live suppression overlay (siteId ensures suppressions apply to email)
+  const report = await generateReport(env, scanId, null, null, null, siteId);
   const site   = await env.DB.prepare(`SELECT * FROM monitored_sites WHERE id = ?`).bind(siteId).first();
 
   // Email failure is logged but never blocks schedule advancement

@@ -5,11 +5,15 @@
  */
 import { requireAuth, json } from '../../../_lib/auth.js';
 import { normalizeUrl, getBaseDomain } from '../../../_lib/crawl.js';
+import { getAllowedOrigin } from '../../../_lib/cors.js';
 
-export const onRequestOptions = () =>
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const MAX_SITES_PER_USER = 20;
+
+export const onRequestOptions = ({ request, env }) =>
   new Response(null, {
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
@@ -47,9 +51,17 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
     return json({ error: 'emails is required (no email address on account)' }, 400);
   }
 
-  const invalidEmail = emails.find(e => typeof e !== 'string' || !e.includes('@'));
+  const invalidEmail = emails.find(e => typeof e !== 'string' || !EMAIL_RE.test(e.trim()));
   if (invalidEmail !== undefined) {
     return json({ error: 'Invalid email address: ' + invalidEmail }, 400);
+  }
+
+  // Per-user site cap
+  const { n } = await env.DB.prepare(
+    'SELECT COUNT(*) as n FROM monitored_sites WHERE user_id = ?'
+  ).bind(data.user.id).first();
+  if (n >= MAX_SITES_PER_USER) {
+    return json({ error: `Maximum ${MAX_SITES_PER_USER} monitored sites per account.` }, 400);
   }
 
   let startUrl;

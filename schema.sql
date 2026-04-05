@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS issues (
   recommended_action TEXT NOT NULL,
   affected_count INTEGER DEFAULT 1,
   example_json TEXT,
+  target_url TEXT,
   FOREIGN KEY (scan_id) REFERENCES scans(id)
 );
 
@@ -107,6 +108,36 @@ CREATE TABLE IF NOT EXISTS monitored_sites (
   last_scan_error  TEXT,
   user_id         TEXT
 );
+
+-- scans.site_id links a scan back to its monitored site
+-- (added in migration 003; not in original schema)
+-- ALTER TABLE scans ADD COLUMN site_id TEXT REFERENCES monitored_sites(id);
+
+CREATE INDEX IF NOT EXISTS idx_scans_site_finished
+  ON scans(site_id, status, finished_at DESC);
+
+CREATE TABLE IF NOT EXISTS suppressed_issues (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  site_id       TEXT    NOT NULL,
+  issue_type    TEXT    NOT NULL,
+  target_url    TEXT    NOT NULL DEFAULT '',
+  suppressed_at INTEGER NOT NULL,
+  suppressed_by TEXT,
+  FOREIGN KEY (site_id) REFERENCES monitored_sites(id) ON DELETE CASCADE,
+  UNIQUE (site_id, issue_type, target_url)
+);
+CREATE INDEX IF NOT EXISTS idx_suppressed_site ON suppressed_issues(site_id);
+
+CREATE TABLE IF NOT EXISTS issue_history (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  site_id           TEXT    NOT NULL,
+  issue_type        TEXT    NOT NULL,
+  target_url        TEXT    NOT NULL DEFAULT '',
+  first_detected_at INTEGER NOT NULL,
+  FOREIGN KEY (site_id) REFERENCES monitored_sites(id) ON DELETE CASCADE,
+  UNIQUE (site_id, issue_type, target_url)
+);
+CREATE INDEX IF NOT EXISTS idx_issue_history_site ON issue_history(site_id);
 
 CREATE INDEX IF NOT EXISTS idx_monitored_sites_next
   ON monitored_sites (next_scan_at) WHERE pending_scan_id IS NULL;

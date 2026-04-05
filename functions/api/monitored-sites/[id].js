@@ -1,29 +1,57 @@
 /**
- * DELETE /api/monitored-sites/:id?key=<MONITOR_SECRET> — remove a monitored site
+ * PATCH  /api/monitored-sites/:id — update emails for a monitored site (admin)
+ * DELETE /api/monitored-sites/:id — remove a monitored site (admin)
  */
-function json(data, status = 200) {
+import { adminAuthCheck } from '../../_lib/monitor-auth.js';
+import { getAllowedOrigin } from '../../_lib/cors.js';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function json(request, env, data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-  });
-}
-
-export async function onRequestOptions() {
-  return new Response(null, {
     headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 }
 
+export function onRequestOptions({ request, env }) {
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
+      'Access-Control-Allow-Methods': 'DELETE, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
+}
+
+export async function onRequestPatch({ params, request, env }) {
+  const denied = adminAuthCheck(request, env, (d, s) => json(request, env, d, s));
+  if (denied) return denied;
+
+  let body;
+  try { body = await request.json(); } catch { return json(request, env, { error: 'Invalid JSON' }, 400); }
+
+  const emails = body.emails;
+  if (!Array.isArray(emails) || emails.length === 0) return json(request, env, { error: 'emails must be a non-empty array' }, 400);
+  const invalid = emails.find(e => typeof e !== 'string' || !EMAIL_RE.test(e.trim()));
+  if (invalid !== undefined) return json(request, env, { error: 'Invalid email: ' + invalid }, 400);
+
+  const { id } = params;
+  const result = await env.DB.prepare(
+    'UPDATE monitored_sites SET emails = ? WHERE id = ?'
+  ).bind(JSON.stringify(emails), id).run();
+
+  if (result.meta.changes === 0) return json(request, env, { error: 'Site not found' }, 404);
+  return json(request, env, { ok: true });
+}
+
 export async function onRequestDelete({ params, request, env }) {
-  const auth = request.headers.get('Authorization') || '';
-  const key = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!key || !env.MONITOR_SECRET || key !== env.MONITOR_SECRET) {
-    return json({ error: 'Access denied' }, 403);
-  }
+  const denied = adminAuthCheck(request, env, (d, s) => json(request, env, d, s));
+  if (denied) return denied;
 
   const { id } = params;
   const result = await env.DB.prepare(
@@ -31,8 +59,8 @@ export async function onRequestDelete({ params, request, env }) {
   ).bind(id).run();
 
   if (result.meta.changes === 0) {
-    return json({ error: 'Site not found' }, 404);
+    return json(request, env, { error: 'Site not found' }, 404);
   }
 
-  return json({ ok: true });
+  return json(request, env, { ok: true });
 }

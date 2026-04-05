@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
-import { getScanReport } from '../lib/api.js';
+import { getScanReport, addSuppression } from '../lib/api.js';
 import { scoreColor, scoreBgColor, severityBadgeClass, gradeDescription } from '../lib/format.js';
 
 function decodeEntities(str) {
@@ -27,6 +27,15 @@ function shortUrl(url, maxLen = 60) {
   } catch {
     return url.length > maxLen ? url.slice(0, maxLen) + '…' : url;
   }
+}
+
+function formatDetectedOn(ts) {
+  if (!ts) return null;
+  const diffDays = Math.floor((Date.now() - ts * 1000) / 86400000);
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 30) return `${diffDays} days ago`;
+  return new Date(ts * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 const ISSUE_LABELS = {
@@ -104,8 +113,11 @@ function CopyCell({ urlKey, url, maxLen = 60, copiedId, onCopy }) {
   );
 }
 
-function IssueTable({ issues, pages }) {
+function IssueTable({ issues: initialIssues, pages, siteId, token }) {
+  const [issues, setIssues] = useState(initialIssues);
   const [copiedId, setCopiedId] = useState(null);
+  const [suppressingId, setSuppressingId] = useState(null);
+  const [suppressError, setSuppressError] = useState(null);
 
   const pageTitle = {};
   for (const p of pages || []) if (p.url) pageTitle[p.url] = p.title;
@@ -118,29 +130,54 @@ function IssueTable({ issues, pages }) {
     });
   }
 
+  async function handleSuppress(issue) {
+    setSuppressingId(issue.id);
+    setSuppressError(null);
+    setIssues(prev => prev.filter(i => i.id !== issue.id)); // optimistic hide
+    try {
+      await addSuppression(token, siteId, issue.type, issue.targetUrl || '');
+    } catch {
+      setIssues(initialIssues); // restore on error
+      setSuppressError('Could not hide this issue. Please try again.');
+    } finally {
+      setSuppressingId(null);
+    }
+  }
+
+  const showSuppressCol = siteId !== undefined; // show column for any monitored-site report
+  const canSuppress = siteId && token;
+
   const groups = [
     { label: 'Critical', items: issues.filter(i => i.severity === 'critical') },
     { label: 'Important', items: issues.filter(i => i.severity === 'important') },
     { label: 'Minor', items: issues.filter(i => i.severity === 'minor') },
   ].filter(g => g.items.length > 0);
 
+  const colSpan = showSuppressCol ? 4 : 3;
+
   return (
     <div className="mb-8">
       <h2 className="text-lg font-bold text-slate-800 mb-4">Issues found</h2>
+      {suppressError && (
+        <div className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+          {suppressError}
+        </div>
+      )}
       <div className="card p-0 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-36">Severity</th>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-40">Severity</th>
               <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-1/2">Broken URL</th>
               <th className="text-left px-4 py-2.5 text-slate-500 font-medium">Found on</th>
+              {showSuppressCol && <th className="w-28" />}
             </tr>
           </thead>
           <tbody>
             {groups.map(({ label, items }) => (
               <>
                 <tr key={label} className="bg-slate-50 border-y border-slate-200">
-                  <td colSpan={3} className="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <td colSpan={colSpan} className="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     {label} ({items.length})
                   </td>
                 </tr>
@@ -150,11 +187,15 @@ function IssueTable({ issues, pages }) {
                     ? (issue.example.sources[0] || null)
                     : (issue.example?.url || null);
                   const tgtKey = `${label}-${idx}-tgt`;
+                  const detectedOn = formatDetectedOn(issue.firstDetectedAt);
                   return (
                     <tr key={`${label}-${idx}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 align-middle">
                       <td className="px-4 py-3">
                         <span className={severityBadgeClass(issue.severity)}>{issue.severity}</span>
                         <div className="text-xs text-slate-500 mt-1 leading-snug">{ISSUE_LABELS[issue.type] || issue.type}</div>
+                        {detectedOn && (
+                          <div className="text-xs text-slate-400 mt-0.5">Since {detectedOn}</div>
+                        )}
                       </td>
                       <td className="px-4 py-3 max-w-0">
                         {issue.example?.anchorText && (
@@ -167,10 +208,69 @@ function IssueTable({ issues, pages }) {
                       <td className="px-4 py-3 max-w-0">
                         <FoundOnCell sourceUrl={sourceUrl} title={pageTitle[sourceUrl]} />
                       </td>
+                      {showSuppressCol && (
+                        <td className="px-4 py-3 text-right">
+                          {canSuppress ? (
+                            <button
+                              onClick={() => handleSuppress(issue)}
+                              disabled={suppressingId === issue.id}
+                              className="text-xs text-slate-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                              title="Mark as false positive — hide from future reports"
+                            >
+                              {suppressingId === issue.id ? 'Hiding…' : 'Not an issue'}
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="text-xs text-slate-300 cursor-default"
+                              title="Sign in to suppress false positives"
+                            >
+                              Not an issue
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
               </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function FixedIssuesSection({ fixedIssues }) {
+  if (!fixedIssues?.length) return null;
+  return (
+    <div className="mb-8">
+      <h2 className="text-lg font-bold text-slate-800 mb-4">
+        Fixed since last scan
+        <span className="ml-2 text-green-600 text-base font-normal">({fixedIssues.length} resolved)</span>
+      </h2>
+      <div className="card p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-green-50 border-b border-slate-200">
+            <tr>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium w-40">Severity</th>
+              <th className="text-left px-4 py-2.5 text-slate-500 font-medium">Issue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fixedIssues.map((issue, i) => (
+              <tr key={i} className="border-b border-slate-100 last:border-0">
+                <td className="px-4 py-3">
+                  <span className={severityBadgeClass(issue.severity)}>{issue.severity}</span>
+                  <div className="text-xs text-slate-500 mt-1 leading-snug">{ISSUE_LABELS[issue.type] || issue.type}</div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="text-slate-400 line-through text-xs font-mono truncate max-w-sm">
+                    {shortUrl(issue.targetUrl, 80)}
+                  </div>
+                </td>
+              </tr>
             ))}
           </tbody>
         </table>
@@ -209,8 +309,10 @@ function WeeklyMonitoringCta() {
 
 export default function Report() {
   const { id } = useParams();
+  const { isAuthenticated, getAccessTokenSilently } = useAuth0();
   const [report, setReport] = useState(null);
   const [error, setError] = useState('');
+  const [token, setToken] = useState(null);
 
   useEffect(() => {
     getScanReport(id)
@@ -220,6 +322,12 @@ export default function Report() {
       })
       .catch(() => setError('Could not load report.'));
   }, [id]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      getAccessTokenSilently().then(setToken).catch(() => {});
+    }
+  }, [isAuthenticated]);
 
   if (error) {
     return (
@@ -273,14 +381,19 @@ export default function Report() {
             </div>
             <div className="text-slate-500 text-sm mt-1">
               Scanned {report.pagesChecked} page{report.pagesChecked !== 1 ? 's' : ''} · {report.linksChecked} links · {report.totalIssues} issue{report.totalIssues !== 1 ? 's' : ''} found
+              {report.suppressedCount > 0 && (
+                <span className="text-slate-400"> · {report.suppressedCount} hidden</span>
+              )}
             </div>
           </div>
         </div>
 
         {/* Weekly monitoring CTA — top */}
-        <div className="mb-8">
-          <WeeklyMonitoringCta />
-        </div>
+        {!report.siteId && (
+          <div className="mb-8">
+            <WeeklyMonitoringCta />
+          </div>
+        )}
 
         {/* Summary counts */}
         {report.totalIssues > 0 ? (
@@ -307,7 +420,17 @@ export default function Report() {
         )}
 
         {/* Issues table */}
-        {report.totalIssues > 0 && <IssueTable issues={report.issues} pages={report.pages} />}
+        {report.totalIssues > 0 && (
+          <IssueTable
+            issues={report.issues}
+            pages={report.pages}
+            siteId={report.siteId}
+            token={token}
+          />
+        )}
+
+        {/* Fixed since last scan */}
+        <FixedIssuesSection fixedIssues={report.fixedIssues} />
 
         {/* Pages crawled */}
         {report.pages && report.pages.length > 0 && (
@@ -315,7 +438,7 @@ export default function Report() {
         )}
 
         {/* Weekly monitoring CTA — bottom */}
-        <WeeklyMonitoringCta />
+        {!report.siteId && <WeeklyMonitoringCta />}
       </main>
     </div>
   );
