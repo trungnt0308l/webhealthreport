@@ -62,3 +62,38 @@ export async function removeMonitoredSite(key, id) {
   if (!res.ok) throw new Error('Failed to remove site');
   return res.json();
 }
+
+// ── User-scoped site API (Auth0 Bearer token) ──────────────────────────────
+
+export async function getUserSites(token) {
+  const res = await fetch(`${BASE}/user/sites`, {
+    headers: bearerHeaders(token),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) throw new Error('Failed to fetch sites');
+  return res.json();
+}
+
+export async function addUserSite(token, url, emails) {
+  const res = await fetch(`${BASE}/user/sites`, {
+    method: 'POST',
+    headers: bearerHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(emails ? { url, emails } : { url }),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to add site');
+  }
+  return res.json();
+}
+
+export async function removeUserSite(token, id) {
+  const res = await fetch(`${BASE}/user/sites/${id}`, {
+    method: 'DELETE',
+    headers: bearerHeaders(token),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) throw new Error('Failed to remove site');
+  return res.json();
+}

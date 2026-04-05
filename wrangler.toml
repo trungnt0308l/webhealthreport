@@ -6,3 +6,7 @@ pages_build_output_dir = "dist"
 binding = "DB"
 database_name = "webhealthreport"
 database_id = "c379e50c-5790-46da-88fa-83c5b82ebeb0"
+
+[vars]
+AUTH0_DOMAIN   = "dev-fu1c3ghemmnxzhop.us.auth0.com"
+AUTH0_AUDIENCE = "https://webhealthreport.pages.dev/api"

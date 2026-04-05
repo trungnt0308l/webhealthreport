@@ -104,9 +104,13 @@ CREATE TABLE IF NOT EXISTS monitored_sites (
   next_scan_at    INTEGER NOT NULL,
   created_at      INTEGER NOT NULL,
   last_scan_status TEXT,
-  last_scan_error  TEXT
+  last_scan_error  TEXT,
+  user_id         TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_monitored_sites_next
   ON monitored_sites (next_scan_at) WHERE pending_scan_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_monitored_sites_user
+  ON monitored_sites(user_id) WHERE user_id IS NOT NULL;
 

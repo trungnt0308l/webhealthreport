@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react';
 import { getScanReport } from '../lib/api.js';
 import { scoreColor, scoreBgColor, severityBadgeClass, gradeDescription } from '../lib/format.js';
 
@@ -178,6 +179,34 @@ function IssueTable({ issues, pages }) {
   );
 }
 
+function WeeklyMonitoringCta() {
+  const { isAuthenticated, loginWithRedirect } = useAuth0();
+  const navigate = useNavigate();
+
+  function handleClick() {
+    if (isAuthenticated) {
+      navigate('/account');
+    } else {
+      loginWithRedirect({ appState: { returnTo: '/account' } });
+    }
+  }
+
+  return (
+    <div className="card bg-brand-700 text-white border-brand-700">
+      <h2 className="text-xl font-bold mb-2">Get this report automatically every week</h2>
+      <p className="text-brand-100 text-sm mb-4">
+        Know about new issues before your customers do. The same scan, delivered to your inbox every Monday.
+      </p>
+      <button
+        className="bg-white text-brand-700 font-semibold px-5 py-2.5 rounded-lg hover:bg-brand-50 transition-colors text-sm"
+        onClick={handleClick}
+      >
+        Start weekly monitoring →
+      </button>
+    </div>
+  );
+}
+
 export default function Report() {
   const { id } = useParams();
   const [report, setReport] = useState(null);
@@ -248,6 +277,11 @@ export default function Report() {
           </div>
         </div>
 
+        {/* Weekly monitoring CTA — top */}
+        <div className="mb-8">
+          <WeeklyMonitoringCta />
+        </div>
+
         {/* Summary counts */}
         {report.totalIssues > 0 ? (
           <div className="grid grid-cols-3 gap-4 mb-8">
@@ -280,19 +314,8 @@ export default function Report() {
           <PagesTable pages={report.pages} />
         )}
 
-        {/* CTA */}
-        <div className="card bg-brand-700 text-white border-brand-700">
-          <h2 className="text-xl font-bold mb-2">Get this report automatically every week</h2>
-          <p className="text-brand-100 text-sm mb-4">
-            Know about new issues before your customers do. The same scan, delivered to your inbox every Monday — <strong>$19/site/month</strong>.
-          </p>
-          <button
-            className="bg-white text-brand-700 font-semibold px-5 py-2.5 rounded-lg hover:bg-brand-50 transition-colors text-sm"
-            onClick={() => alert('Weekly monitoring coming soon! Check back shortly.')}
-          >
-            Start weekly monitoring →
-          </button>
-        </div>
+        {/* Weekly monitoring CTA — bottom */}
+        <WeeklyMonitoringCta />
       </main>
     </div>
   );
