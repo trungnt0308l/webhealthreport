@@ -213,7 +213,7 @@ function SitesSection({ token, userEmail }) {
             </button>
           </div>
           {formError && <p className="text-red-600 text-sm">{formError}</p>}
-          <p className="text-xs text-slate-400">First scan runs within 7 days, then weekly thereafter.</p>
+          <p className="text-xs text-slate-400">First scan runs within 24 hours, then weekly thereafter.</p>
         </form>
       </div>
 

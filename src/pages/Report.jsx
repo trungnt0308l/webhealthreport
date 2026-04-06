@@ -295,7 +295,7 @@ function WeeklyMonitoringCta() {
     <div className="card bg-brand-700 text-white border-brand-700">
       <h2 className="text-xl font-bold mb-2">Get this report automatically every week</h2>
       <p className="text-brand-100 text-sm mb-4">
-        Know about new issues before your customers do. The same scan, delivered to your inbox every Monday.
+        Know about new issues before your customers do. The same scan, delivered to your inbox every week.
       </p>
       <button
         className="bg-white text-brand-700 font-semibold px-5 py-2.5 rounded-lg hover:bg-brand-50 transition-colors text-sm"
@@ -356,7 +356,7 @@ export default function Report() {
   }
 
   const scanDate = report.scannedAt
-    ? new Date(report.scannedAt * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    ? new Date(report.scannedAt * 1000).toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     : '';
 
   return (

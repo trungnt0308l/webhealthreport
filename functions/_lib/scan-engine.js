@@ -8,12 +8,12 @@ import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInt
 import { checkBatch, fetchPage } from './checker.js';
 import { detectIssues } from './issues.js';
 
-const HTML_BATCH_SIZE = 5;
+const HTML_BATCH_SIZE = 2;
 const HEAD_BATCH_SIZE = 10;
 const MAX_DEPTH = 5;
 const D1_CHUNK = 100;
 
-const FREE_LIMITS    = { maxPages: 300,  maxLinks: 5000,  maxLinksPerPage: 50,  maxImagesPerPage: 100 };
+const FREE_LIMITS    = { maxPages: 500,  maxLinks: 5000,  maxLinksPerPage: 250, maxImagesPerPage: 250 };
 const PREMIUM_LIMITS = { maxPages: 1000, maxLinks: 10000, maxLinksPerPage: 250, maxImagesPerPage: 250 };
 const BOT_BLOCKED_STATUSES = new Set([403, 426, 429, 526, 530, 999]);
 
@@ -155,6 +155,13 @@ export async function processBatch(env, scanId, siteId = null) {
   const items = [...htmlItems, ...headItems];
 
   if (items.length === 0) {
+    const remaining = await env.DB.prepare(
+      `SELECT COUNT(*) AS cnt FROM crawl_queue
+       WHERE scan_id = ? AND status IN ('pending', 'processing')`
+    ).bind(scanId).first();
+    if (remaining.cnt > 0) {
+      return { status: 'running', recentChecks: [] };
+    }
     await finalize(env, scan, scanId, siteId);
     return { status: 'complete', recentChecks: [] };
   }
@@ -194,6 +201,9 @@ export async function processBatch(env, scanId, siteId = null) {
   const htmlResults = await Promise.all(htmlItems.map(processHtmlItem));
 
   const baseDomain = scan.base_domain;
+  let pagesRemaining = Math.max(0, LIMITS.maxPages - pagesCounted);
+  let linksRemaining = Math.max(0, LIMITS.maxLinks - linksCounted);
+
   for (const r of htmlResults) {
     const { item } = r;
     const absUrl = item.normalized_url;
@@ -215,8 +225,10 @@ export async function processBatch(env, scanId, siteId = null) {
 
     newPages++;
     newLinksChecked++;
+    pagesRemaining--;
+    linksRemaining--;
 
-    if (newDepth <= MAX_DEPTH) {
+    if (newDepth <= MAX_DEPTH && pagesRemaining > 0) {
       for (const { href, text } of r.links) {
         const norm = normalizeUrl(href, r.finalUrl);
         if (!norm || seen.has(norm) || isTrackingUrl(norm)) continue;
@@ -229,12 +241,15 @@ export async function processBatch(env, scanId, siteId = null) {
           if (!queueNorm) continue;
           if (norm !== queueNorm && seen.has(queueNorm)) continue;
           if (norm !== queueNorm) seen.add(queueNorm);
+          if (!isInternal && linksRemaining <= 0) continue;
           queueInserts.push(env.DB.prepare(
             `INSERT OR IGNORE INTO crawl_queue (scan_id, url, normalized_url, url_type, source_url, depth, anchor_text)
              VALUES (?, ?, ?, ?, ?, ?, ?)`
           ).bind(scanId, norm, queueNorm, isInternal ? 'internal' : 'external', absUrl, newDepth, text || ''));
         } catch { /* skip */ }
       }
+    }
+    if (newDepth <= MAX_DEPTH && linksRemaining > 0) {
       for (const { src, alt } of r.images) {
         const norm = normalizeImageUrl(src, r.finalUrl);
         if (!norm || seen.has(norm) || isTrackingUrl(norm)) continue;

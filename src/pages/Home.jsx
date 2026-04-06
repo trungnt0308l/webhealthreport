@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react';
 import { startScan } from '../lib/api.js';
 import { usePageMeta } from '../hooks/usePageMeta.js';
 
@@ -61,6 +62,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth0();
 
   usePageMeta({
     title: 'Website Health Report — Free Website Scanner',
@@ -165,9 +167,16 @@ export default function Home() {
             <p className="mt-3 text-sm text-red-600">{error}</p>
           )}
 
-          <p className="mt-4 text-xs text-slate-400">
-            Free scan — no account required. We check up to 300 pages and 5,000 links.
-          </p>
+          {isAuthenticated ? (
+            <p className="mt-4 text-xs text-slate-400">
+              One-off scan — up to <span className="font-medium text-slate-500">500 pages</span> and <span className="font-medium text-slate-500">5,000 links</span>. Your weekly monitored scans check up to 1,000 pages and 10,000 links.
+            </p>
+          ) : (
+            <p className="mt-4 text-xs text-slate-400">
+              Free scan — no account required. Up to <span className="font-medium text-slate-500">500 pages</span> and <span className="font-medium text-slate-500">5,000 links</span>.{' '}
+              <Link to="/register" className="text-brand-600 hover:underline">Sign up free</Link> for weekly monitoring with 1,000 pages.
+            </p>
+          )}
         </div>
 
         {/* Feature bullets */}
@@ -254,7 +263,7 @@ export default function Home() {
           <p className="text-slate-500 text-center mb-8 text-sm">Quick answers — or see the full FAQ.</p>
           <div className="card">
             {[
-              { question: 'Is it really free?', answer: 'Yes. One-off scans are completely free — no account required. Free scans check up to 300 pages and 5,000 links. With a free account, weekly monitored scans check up to 1,000 pages and 10,000 links.' },
+              { question: 'Is it really free?', answer: 'Yes. One-off scans are completely free — no account required. Free scans check up to 500 pages and 5,000 links. With a free account, weekly monitored scans check up to 1,000 pages and 10,000 links.' },
               { question: 'Does it scan JavaScript-rendered content?', answer: 'No — we fetch raw HTML the same way Googlebot does on its first pass. This means we find the same broken links and missing pages that search engine crawlers encounter.' },
               { question: 'How long does a scan take?', answer: 'Most sites complete in 30 seconds to 2 minutes. Larger sites with hundreds of pages may take a little longer, but you can watch the progress live.' },
               { question: 'What is weekly monitoring?', answer: 'With a free account you can add your site and we will automatically scan it every week and email you a health report. It is the easiest way to catch new issues before your visitors or Google does.' },

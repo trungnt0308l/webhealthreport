@@ -12,7 +12,7 @@ const FAQS = [
       },
       {
         question: 'How many pages will it scan?',
-        answer: 'Free one-off scans check up to 300 pages and 5,000 links. Monitored scans (with a free account) check up to 1,000 pages and 10,000 links. For most small and medium-sized websites either limit covers the entire site. If your site is larger, the scanner works through it systematically until the cap is reached.',
+        answer: 'Free one-off scans check up to 500 pages and 5,000 links. Monitored scans (with a free account) check up to 1,000 pages and 10,000 links. For most small and medium-sized websites either limit covers the entire site. If your site is larger, the scanner works through it systematically until the cap is reached.',
       },
       {
         question: 'Does it scan JavaScript-rendered content?',
@@ -24,7 +24,7 @@ const FAQS = [
       },
       {
         question: 'Is it really free?',
-        answer: 'Yes. One-off scans are completely free with no account required — just paste your URL and go. Free scans check up to 300 pages and 5,000 links. With a free account, weekly monitored scans check up to 1,000 pages and 10,000 links.',
+        answer: 'Yes. One-off scans are completely free with no account required — just paste your URL and go. Free scans check up to 500 pages and 5,000 links. With a free account, weekly monitored scans check up to 1,000 pages and 10,000 links.',
       },
     ],
   },

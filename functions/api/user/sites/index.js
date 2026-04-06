@@ -78,8 +78,8 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   const baseDomain = getBaseDomain(normalizedStart);
   const id = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
   const now = Math.floor(Date.now() / 1000);
-  // Random spread within next 7 days — prevents all sites scanning simultaneously
-  const nextScanAt = now + Math.floor(Math.random() * 604800);
+  // Random spread within next 24 hours for first scan — prevents all new sites scanning simultaneously
+  const nextScanAt = now + Math.floor(Math.random() * 86400);
 
   await env.DB.prepare(
     `INSERT INTO monitored_sites (id, url, base_domain, emails, next_scan_at, created_at, user_id)

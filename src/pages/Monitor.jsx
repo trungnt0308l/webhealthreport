@@ -213,7 +213,7 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
               </button>
             </div>
             {formError && <p className="text-red-600 text-sm">{formError}</p>}
-            <p className="text-xs text-slate-400">First scan will run within 7 days, then weekly.</p>
+            <p className="text-xs text-slate-400">First scan will run within 24 hours, then weekly.</p>
           </form>
         </div>
 
@@ -263,7 +263,7 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
                         </td>
                         <td className="px-5 py-3 whitespace-nowrap">
                           {site.pending_scan_id
-                            ? <span className="text-amber-600 font-medium text-xs">Scanning…</span>
+                            ? <a href={`/scan/${site.pending_scan_id}`} className="text-amber-600 font-medium text-xs hover:underline">Scanning…</a>
                             : site.last_scan_status === 'success'
                               ? <span className="text-green-600 text-xs font-medium">OK</span>
                               : site.last_scan_status === 'failed'

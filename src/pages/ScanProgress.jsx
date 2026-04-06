@@ -31,6 +31,7 @@ export default function ScanProgress() {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState('');
   const intervalRef = useRef(null);
+  const pollingRef = useRef(false);
   const dotCount = useRef(0);
   const [dots, setDots] = useState('');
 
@@ -38,6 +39,8 @@ export default function ScanProgress() {
     let active = true;
 
     async function poll() {
+      if (pollingRef.current) return;
+      pollingRef.current = true;
       try {
         const data = await getScanStatus(id);
         if (!active) return;
@@ -54,6 +57,8 @@ export default function ScanProgress() {
         if (!active) return;
         setError('Lost connection. Please refresh to resume.');
         clearInterval(intervalRef.current);
+      } finally {
+        pollingRef.current = false;
       }
     }
 
