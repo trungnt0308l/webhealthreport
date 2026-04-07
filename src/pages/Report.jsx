@@ -399,7 +399,7 @@ export default function Report() {
         </div>
 
         {/* Weekly monitoring CTA — top */}
-        {!report.siteId && (
+        {!isAuthenticated && (
           <div className="mb-8">
             <WeeklyMonitoringCta />
           </div>
@@ -448,7 +448,7 @@ export default function Report() {
         )}
 
         {/* Weekly monitoring CTA — bottom */}
-        {!report.siteId && <WeeklyMonitoringCta />}
+        {!isAuthenticated && <WeeklyMonitoringCta />}
       </main>
     </div>
   );

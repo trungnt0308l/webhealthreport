@@ -1,5 +1,3 @@
-$ErrorActionPreference = "Stop"
-
 Write-Host ""
 Write-Host "=== Website Health Report - Deploy ===" -ForegroundColor Cyan
 Write-Host ""

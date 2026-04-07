@@ -192,11 +192,16 @@ export function getBaseDomain(urlStr) {
   }
 }
 
+function stripWww(h) {
+  return h.startsWith('www.') ? h.slice(4) : h;
+}
+
 export function isInternalUrl(urlStr, baseDomain) {
   try {
-    const url = new URL(urlStr);
-    return url.hostname.toLowerCase() === baseDomain ||
-           url.hostname.toLowerCase().endsWith('.' + baseDomain);
+    const host = new URL(urlStr).hostname.toLowerCase();
+    const normHost = stripWww(host);
+    const normBase = stripWww(baseDomain.toLowerCase());
+    return normHost === normBase || normHost.endsWith('.' + normBase);
   } catch {
     return false;
   }
