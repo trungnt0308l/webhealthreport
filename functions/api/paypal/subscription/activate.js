@@ -80,9 +80,12 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   const siteId = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
   const nextScanAt = now + Math.floor(Math.random() * 86400);
 
-  // INSERT OR IGNORE: PRIMARY KEY (user_id) prevents duplicate rows on retry
+  // INSERT OR REPLACE: handles both first-time activation and re-subscription after cancellation.
+  // On retry (same subscriptionId, row already active): REPLACE resets site_count to 1 which is
+  // correct since this path always adds exactly one site. On re-subscribe (new subscriptionId,
+  // old cancelled row exists): REPLACE overwrites the stale cancelled row.
   await env.DB.prepare(
-    `INSERT OR IGNORE INTO user_subscriptions
+    `INSERT OR REPLACE INTO user_subscriptions
      (user_id, paypal_subscription_id, status, site_count, next_billing_date, created_at, updated_at)
      VALUES (?, ?, 'active', 1, ?, ?, ?)`
   ).bind(data.user.id, subscriptionId, nextBillingDate, now, now).run();
