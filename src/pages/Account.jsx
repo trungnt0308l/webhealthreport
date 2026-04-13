@@ -6,7 +6,8 @@ import {
   cancelSubscription, createProRateOrder, captureProRateOrder,
 } from '../lib/api.js';
 
-const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID;
+const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID
+  || 'ARBvCNAx34VDcfk1QTFnpg6Bl19KSGv-TfJkqNxIZPH2k4i6M5ueZKdMPIBzL19dO5ZHWqZMd7EO8WQY';
 
 function formatDate(unixTs) {
   if (!unixTs) return '—';
