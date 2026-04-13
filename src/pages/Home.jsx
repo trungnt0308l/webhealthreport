@@ -137,7 +137,7 @@ export default function Home() {
             missing pages, and the issues that matter most.
           </p>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <form id="scan-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
             <div className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
@@ -274,7 +274,11 @@ export default function Home() {
                   <li key={f} className="flex items-start gap-2"><span className="text-green-500 font-bold mt-0.5">✓</span>{f}</li>
                 ))}
               </ul>
-              <Link to="/" className="btn-secondary text-center text-sm">Scan my site →</Link>
+              <button
+                type="button"
+                onClick={() => document.getElementById('scan-form').scrollIntoView({ behavior: 'smooth' })}
+                className="btn-secondary text-sm"
+              >Scan my site →</button>
             </div>
 
             {/* Paid tier */}
