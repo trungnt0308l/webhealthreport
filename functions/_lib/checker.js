@@ -30,7 +30,7 @@ const BROWSER_HEADERS = {
  * Fetch a URL with manual redirect following so we can count hops.
  * Returns { status, finalUrl, redirectCount, responseMs, error }.
  */
-async function doFetch(url, method) {
+export async function doFetch(url, method) {
   const start = Date.now();
   let currentUrl = url;
   let redirectCount = 0;

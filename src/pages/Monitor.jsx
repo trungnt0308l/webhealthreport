@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getMonitoredSites, addMonitoredSite, removeMonitoredSite, updateMonitoredSiteEmails } from '../lib/api.js';
+import { getMonitoredSites, addMonitoredSite, removeMonitoredSite, updateMonitoredSiteEmails, debugCheckUrl } from '../lib/api.js';
 
 function formatDate(unixTs) {
   if (!unixTs) return '—';
@@ -121,6 +121,101 @@ function EmailEditCell({ siteId, emails, onSave }) {
         <button onClick={handleCancel} disabled={saving} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
       </div>
       {error && <p className="text-red-600 text-xs">{error}</p>}
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  if (status === null || status === undefined) {
+    return <span className="font-mono text-amber-600 font-semibold">null</span>;
+  }
+  if (status >= 200 && status < 300) {
+    return <span className="font-mono text-green-600 font-semibold">{status}</span>;
+  }
+  if (status >= 400) {
+    return <span className="font-mono text-red-600 font-semibold">{status}</span>;
+  }
+  return <span className="font-mono text-slate-600 font-semibold">{status}</span>;
+}
+
+function UrlChecker({ monitorKey }) {
+  const [urlInput, setUrlInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  async function handleCheck(e) {
+    e.preventDefault();
+    const url = urlInput.trim();
+    if (!url) return;
+    setError('');
+    setResult(null);
+    setLoading(true);
+    try {
+      const data = await debugCheckUrl(monitorKey, url);
+      setResult(data);
+    } catch (err) {
+      setError(err.message || 'Request failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const rows = result ? [
+    { label: 'HEAD', data: result.head },
+    { label: 'GET', data: result.get },
+    { label: 'checkUrl', data: result.checkUrl, highlight: true },
+  ] : [];
+
+  return (
+    <div className="card">
+      <h2 className="font-semibold text-slate-800 mb-1">URL checker</h2>
+      <p className="text-slate-500 text-xs mb-4">Test what the scan tool returns for any URL — HEAD, GET, and the merged result it actually records.</p>
+      <form onSubmit={handleCheck} className="flex gap-3 mb-4">
+        <input
+          type="text"
+          value={urlInput}
+          onChange={e => setUrlInput(e.target.value)}
+          placeholder="https://example.com/image.jpg"
+          className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono"
+          disabled={loading}
+        />
+        <button type="submit" disabled={loading || !urlInput.trim()} className="btn-primary text-sm whitespace-nowrap">
+          {loading ? 'Checking…' : 'Check URL'}
+        </button>
+      </form>
+      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {result && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-50 text-slate-500 font-medium uppercase tracking-wide">
+                <th className="text-left px-3 py-2">Method / Step</th>
+                <th className="text-left px-3 py-2">Status</th>
+                <th className="text-left px-3 py-2">Final URL</th>
+                <th className="text-left px-3 py-2">Redirects</th>
+                <th className="text-left px-3 py-2">Time (ms)</th>
+                <th className="text-left px-3 py-2">Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ label, data, highlight }) => (
+                <tr key={label} className={`border-t border-slate-100 ${highlight ? 'bg-slate-50 font-semibold' : ''}`}>
+                  <td className="px-3 py-2 font-mono text-slate-700">
+                    {label}
+                    {highlight && <span className="ml-2 text-[10px] text-slate-400 font-normal">(recorded)</span>}
+                  </td>
+                  <td className="px-3 py-2"><StatusBadge status={data.status} /></td>
+                  <td className="px-3 py-2 font-mono text-slate-600 max-w-[300px] truncate" title={data.finalUrl}>{data.finalUrl}</td>
+                  <td className="px-3 py-2 text-slate-600">{data.redirectCount ?? 0}</td>
+                  <td className="px-3 py-2 text-slate-600">{data.responseMs ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-500">{data.error || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -296,6 +391,10 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
             </div>
           )}
         </div>
+
+        {/* URL checker */}
+        <UrlChecker monitorKey={monitorKey} />
+
       </main>
     </div>
   );

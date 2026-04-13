@@ -126,6 +126,20 @@ export async function removeUserSite(token, id) {
   return res.json();
 }
 
+export async function debugCheckUrl(key, url) {
+  const res = await fetch(`${BASE}/debug/check-url`, {
+    method: 'POST',
+    headers: bearerHeaders(key, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ url }),
+  });
+  if (res.status === 403) throw Object.assign(new Error('Access denied'), { status: 403 });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Check failed');
+  }
+  return res.json();
+}
+
 export async function addSuppression(token, siteId, issueType, targetUrl) {
   const res = await fetch(`${BASE}/user/sites/${siteId}/suppressions`, {
     method: 'POST',
