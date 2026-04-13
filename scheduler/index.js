@@ -5,7 +5,10 @@ import { generateReport }  from '../functions/_lib/report.js';
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(launchDueScans(env));
+    ctx.waitUntil(Promise.all([
+      launchDueScans(env),
+      enforceGracePeriods(env),
+    ]));
   },
 
   async queue(batch, env) {
@@ -55,7 +58,7 @@ async function launchDueScans(env) {
   const now = Math.floor(Date.now() / 1000);
   const due = await env.DB.prepare(
     `SELECT id, url, base_domain FROM monitored_sites
-     WHERE next_scan_at <= ? AND pending_scan_id IS NULL LIMIT 20`
+     WHERE next_scan_at <= ? AND pending_scan_id IS NULL AND paused = 0 LIMIT 20`
   ).bind(now).all();
 
   for (const site of due.results) {
@@ -127,6 +130,47 @@ async function runScan(env, msg) {
     console.error(`Scan error [${scanId}]:`, err);
     // Unexpected errors use retry so failed messages land in the DLQ after 100 attempts
     msg.retry({ delaySeconds: 10 });
+  }
+}
+
+/**
+ * Grace period enforcement: runs every cron tick.
+ * - Pause sites for users whose grace_period_ends_at has passed.
+ * - Delete sites + subscription for users whose payment_failed_at was 30+ days ago.
+ */
+async function enforceGracePeriods(env) {
+  const now = Math.floor(Date.now() / 1000);
+
+  // Find users past their grace period deadline
+  const expired = await env.DB.prepare(
+    `SELECT user_id, payment_failed_at FROM user_subscriptions
+     WHERE grace_period_ends_at IS NOT NULL
+       AND grace_period_ends_at < ?
+       AND status = 'grace_period'`
+  ).bind(now).all();
+
+  for (const row of (expired.results || [])) {
+    // Pause all their sites
+    await env.DB.prepare(
+      `UPDATE monitored_sites SET paused = 1 WHERE user_id = ? AND paused = 0`
+    ).bind(row.user_id).run();
+
+    await env.DB.prepare(
+      `UPDATE user_subscriptions SET status = 'suspended', updated_at = ? WHERE user_id = ?`
+    ).bind(now, row.user_id).run();
+  }
+
+  // Delete sites + subscription for users who have been suspended for 30+ days
+  const deletable = await env.DB.prepare(
+    `SELECT user_id FROM user_subscriptions
+     WHERE status IN ('suspended', 'cancelled')
+       AND payment_failed_at IS NOT NULL
+       AND payment_failed_at < ?`
+  ).bind(now - 30 * 86400).all();
+
+  for (const row of (deletable.results || [])) {
+    await env.DB.prepare(`DELETE FROM monitored_sites WHERE user_id = ?`).bind(row.user_id).run();
+    await env.DB.prepare(`DELETE FROM user_subscriptions WHERE user_id = ?`).bind(row.user_id).run();
   }
 }
 

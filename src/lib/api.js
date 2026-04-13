@@ -140,6 +140,82 @@ export async function debugCheckUrl(key, url) {
   return res.json();
 }
 
+// ── PayPal billing API ─────────────────────────────────────────────────────
+
+export async function getSubscription(token) {
+  const res = await fetch(`${BASE}/paypal/subscription`, {
+    headers: bearerHeaders(token),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) throw new Error('Failed to fetch subscription');
+  return res.json();
+}
+
+export async function createPayPalSubscription(token) {
+  const res = await fetch(`${BASE}/paypal/subscription`, {
+    method: 'POST',
+    headers: bearerHeaders(token, { 'Content-Type': 'application/json' }),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to create subscription');
+  }
+  return res.json();
+}
+
+export async function activateSubscription(token, subscriptionId, url, emails) {
+  const res = await fetch(`${BASE}/paypal/subscription/activate`, {
+    method: 'POST',
+    headers: bearerHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ subscriptionId, url, emails }),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to activate subscription');
+  }
+  return res.json();
+}
+
+export async function cancelSubscription(token) {
+  const res = await fetch(`${BASE}/paypal/subscription`, {
+    method: 'DELETE',
+    headers: bearerHeaders(token),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) throw new Error('Failed to cancel subscription');
+  return res.json();
+}
+
+export async function createProRateOrder(token, url, emails) {
+  const res = await fetch(`${BASE}/paypal/order/create`, {
+    method: 'POST',
+    headers: bearerHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ url, emails }),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to create payment');
+  }
+  return res.json();
+}
+
+export async function captureProRateOrder(token, orderId) {
+  const res = await fetch(`${BASE}/paypal/order/capture`, {
+    method: 'POST',
+    headers: bearerHeaders(token, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ orderId }),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to capture payment');
+  }
+  return res.json();
+}
+
 export async function addSuppression(token, siteId, issueType, targetUrl) {
   const res = await fetch(`${BASE}/user/sites/${siteId}/suppressions`, {
     method: 'POST',

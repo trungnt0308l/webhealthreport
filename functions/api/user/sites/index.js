@@ -22,7 +22,7 @@ export const onRequestOptions = ({ request, env }) =>
 export const onRequestGet = requireAuth(async ({ env, data }) => {
   const result = await env.DB.prepare(
     `SELECT id, url, base_domain, emails, last_scan_id, pending_scan_id,
-            next_scan_at, created_at, last_scan_status, last_scan_error
+            next_scan_at, created_at, last_scan_status, last_scan_error, paused
      FROM monitored_sites
      WHERE user_id = ?
      ORDER BY created_at DESC`
@@ -32,6 +32,16 @@ export const onRequestGet = requireAuth(async ({ env, data }) => {
 });
 
 export const onRequestPost = requireAuth(async ({ request, env, data }) => {
+  // All paid site additions go through /api/paypal/order/capture (subsequent sites)
+  // or /api/paypal/subscription/activate (first site). This endpoint is a safety net
+  // that blocks direct access without a valid subscription.
+  const sub = await env.DB.prepare(
+    `SELECT status FROM user_subscriptions WHERE user_id = ?`
+  ).bind(data.user.id).first();
+  if (!sub || sub.status !== 'active') {
+    return json({ error: 'subscription_required', message: 'An active subscription is required.' }, 402);
+  }
+
   let body;
   try {
     body = await request.json();

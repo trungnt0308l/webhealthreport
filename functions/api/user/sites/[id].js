@@ -7,6 +7,7 @@
  */
 import { requireAuth, json } from '../../../_lib/auth.js';
 import { getAllowedOrigin } from '../../../_lib/cors.js';
+import * as paypal from '../../../_lib/paypal.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -39,13 +40,50 @@ export const onRequestPatch = requireAuth(async ({ params, request, env, data })
 
 export const onRequestDelete = requireAuth(async ({ params, env, data }) => {
   const { id } = params;
+  const userId = data.user.id;
 
-  const result = await env.DB.prepare(
+  // Verify ownership first
+  const site = await env.DB.prepare(
+    `SELECT id FROM monitored_sites WHERE id = ? AND user_id = ?`
+  ).bind(id, userId).first();
+  if (!site) return json({ error: 'Site not found' }, 404);
+
+  // Delete the site
+  await env.DB.prepare(
     `DELETE FROM monitored_sites WHERE id = ? AND user_id = ?`
-  ).bind(id, data.user.id).run();
+  ).bind(id, userId).run();
 
-  if (result.meta?.changes === 0) {
-    return json({ error: 'Site not found' }, 404);
+  // Update subscription quantity
+  const now = Math.floor(Date.now() / 1000);
+  const sub = await env.DB.prepare(
+    `SELECT paypal_subscription_id, status, site_count FROM user_subscriptions WHERE user_id = ?`
+  ).bind(userId).first();
+
+  if (sub && sub.status === 'active' && sub.site_count > 0) {
+    const newCount = sub.site_count - 1;
+
+    if (newCount === 0) {
+      // Last site removed — cancel the subscription
+      try {
+        await paypal.cancelSubscription(env, sub.paypal_subscription_id, 'No monitored sites remaining');
+      } catch (err) {
+        console.error(`PayPal cancel failed for user ${userId}:`, err);
+      }
+      await env.DB.prepare(
+        `UPDATE user_subscriptions SET status = 'cancelled', site_count = 0, updated_at = ? WHERE user_id = ?`
+      ).bind(now, userId).run();
+    } else {
+      // Reduce quantity by one
+      try {
+        await paypal.reviseSubscription(env, sub.paypal_subscription_id, newCount);
+      } catch (err) {
+        console.error(`PayPal revise failed for user ${userId}:`, err);
+        // Best-effort — update DB anyway so site_count stays accurate
+      }
+      await env.DB.prepare(
+        `UPDATE user_subscriptions SET site_count = ?, updated_at = ? WHERE user_id = ?`
+      ).bind(newCount, now, userId).run();
+    }
   }
 
   return json({ ok: true });
