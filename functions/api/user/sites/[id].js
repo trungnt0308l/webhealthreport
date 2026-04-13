@@ -48,7 +48,17 @@ export const onRequestDelete = requireAuth(async ({ params, env, data }) => {
   ).bind(id, userId).first();
   if (!site) return json({ error: 'Site not found' }, 404);
 
-  // Delete the site — this always succeeds regardless of PayPal state
+  // Clear FKs before deleting:
+  // 1. scans.site_id references monitored_sites(id) — null it out so the scan
+  //    history remains accessible by scan ID but no longer blocks deletion.
+  // 2. monitored_sites.pending_scan_id references scans(id) — clear the mutex.
+  await env.DB.prepare(
+    `UPDATE monitored_sites SET pending_scan_id = NULL WHERE id = ?`
+  ).bind(id).run();
+  await env.DB.prepare(
+    `UPDATE scans SET site_id = NULL WHERE site_id = ?`
+  ).bind(id).run();
+
   await env.DB.prepare(
     `DELETE FROM monitored_sites WHERE id = ? AND user_id = ?`
   ).bind(id, userId).run();
