@@ -11,5 +11,6 @@ database_id = "c379e50c-5790-46da-88fa-83c5b82ebeb0"
 AUTH0_DOMAIN        = "dev-fu1c3ghemmnxzhop.us.auth0.com"
 AUTH0_AUDIENCE      = "https://webhealthreport.pages.dev/api"
 ALLOWED_ORIGIN      = "https://webhealthreport.pages.dev"
+VITE_PAYPAL_CLIENT_ID = "ARBvCNAx34VDcfk1QTFnpg6Bl19KSGv-TfJkqNxIZPH2k4i6M5ueZKdMPIBzL19dO5ZHWqZMd7EO8WQY"
 # TURNSTILE_SITE_KEY  = "your_site_key"   # add this for production (also set in Pages env vars for the frontend build)
 # TURNSTILE_SECRET_KEY — wrangler secret put TURNSTILE_SECRET_KEY
