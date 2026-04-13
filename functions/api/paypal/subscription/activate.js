@@ -10,10 +10,10 @@
  *  - Verifies subscription.plan_id === env.PAYPAL_PLAN_ID (prevents self-created $0 plans)
  *  - INSERT OR IGNORE on user_subscriptions prevents duplicate rows on retry
  */
-import { requireAuth, json } from '../../../../_lib/auth.js';
-import { getAllowedOrigin } from '../../../../_lib/cors.js';
-import { normalizeUrl, getBaseDomain } from '../../../../_lib/crawl.js';
-import * as paypal from '../../../../_lib/paypal.js';
+import { requireAuth, json } from '../../../_lib/auth.js';
+import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { normalizeUrl, getBaseDomain } from '../../../_lib/crawl.js';
+import * as paypal from '../../../_lib/paypal.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 

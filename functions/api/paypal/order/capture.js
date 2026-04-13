@@ -12,10 +12,10 @@
  *  - Operations ordered: capture money → revise subscription → write site to DB
  *    (failed_captures table logs partial failures for support resolution)
  */
-import { requireAuth, json } from '../../../../_lib/auth.js';
-import { getAllowedOrigin } from '../../../../_lib/cors.js';
-import { getBaseDomain } from '../../../../_lib/crawl.js';
-import * as paypal from '../../../../_lib/paypal.js';
+import { requireAuth, json } from '../../../_lib/auth.js';
+import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { getBaseDomain } from '../../../_lib/crawl.js';
+import * as paypal from '../../../_lib/paypal.js';
 
 export const onRequestOptions = ({ request, env }) =>
   new Response(null, {

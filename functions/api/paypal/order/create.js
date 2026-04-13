@@ -13,10 +13,10 @@
  *  - Stores order in paypal_pending_orders with server-computed amount
  *  - Rate-limits to 3 uncaptured orders per hour to prevent table flooding
  */
-import { requireAuth, json } from '../../../../_lib/auth.js';
-import { getAllowedOrigin } from '../../../../_lib/cors.js';
-import { normalizeUrl } from '../../../../_lib/crawl.js';
-import * as paypal from '../../../../_lib/paypal.js';
+import { requireAuth, json } from '../../../_lib/auth.js';
+import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { normalizeUrl } from '../../../_lib/crawl.js';
+import * as paypal from '../../../_lib/paypal.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PRICE_PER_SITE = 9.00;
