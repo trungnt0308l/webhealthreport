@@ -121,7 +121,10 @@ export default function Home() {
           </div>
           <nav className="flex items-center gap-5 text-sm">
             <Link to="/faq" className="text-slate-500 hover:text-slate-800 transition-colors">FAQ</Link>
-            <Link to="/register" className="btn-primary py-1.5 px-3 text-sm">Get weekly reports</Link>
+            {isAuthenticated
+              ? <Link to="/account" className="btn-primary py-1.5 px-3 text-sm">My account</Link>
+              : <Link to="/register" className="btn-primary py-1.5 px-3 text-sm">Get weekly reports</Link>
+            }
           </nav>
         </div>
       </header>
