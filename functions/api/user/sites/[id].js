@@ -48,42 +48,44 @@ export const onRequestDelete = requireAuth(async ({ params, env, data }) => {
   ).bind(id, userId).first();
   if (!site) return json({ error: 'Site not found' }, 404);
 
-  // Delete the site
+  // Delete the site — this always succeeds regardless of PayPal state
   await env.DB.prepare(
     `DELETE FROM monitored_sites WHERE id = ? AND user_id = ?`
   ).bind(id, userId).run();
 
-  // Update subscription quantity
-  const now = Math.floor(Date.now() / 1000);
-  const sub = await env.DB.prepare(
-    `SELECT paypal_subscription_id, status, site_count FROM user_subscriptions WHERE user_id = ?`
-  ).bind(userId).first();
+  // Best-effort: update subscription quantity.
+  // Failures here (missing table, PayPal error, no subscription) never block deletion.
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const sub = await env.DB.prepare(
+      `SELECT paypal_subscription_id, status, site_count FROM user_subscriptions WHERE user_id = ?`
+    ).bind(userId).first();
 
-  if (sub && sub.status === 'active' && sub.site_count > 0) {
-    const newCount = sub.site_count - 1;
+    if (sub && sub.status === 'active' && sub.site_count > 0) {
+      const newCount = sub.site_count - 1;
 
-    if (newCount === 0) {
-      // Last site removed — cancel the subscription
-      try {
-        await paypal.cancelSubscription(env, sub.paypal_subscription_id, 'No monitored sites remaining');
-      } catch (err) {
-        console.error(`PayPal cancel failed for user ${userId}:`, err);
+      if (newCount === 0) {
+        try {
+          await paypal.cancelSubscription(env, sub.paypal_subscription_id, 'No monitored sites remaining');
+        } catch (err) {
+          console.error(`PayPal cancel failed for user ${userId}:`, err);
+        }
+        await env.DB.prepare(
+          `UPDATE user_subscriptions SET status = 'cancelled', site_count = 0, updated_at = ? WHERE user_id = ?`
+        ).bind(now, userId).run();
+      } else {
+        try {
+          await paypal.reviseSubscription(env, sub.paypal_subscription_id, newCount);
+        } catch (err) {
+          console.error(`PayPal revise failed for user ${userId}:`, err);
+        }
+        await env.DB.prepare(
+          `UPDATE user_subscriptions SET site_count = ?, updated_at = ? WHERE user_id = ?`
+        ).bind(newCount, now, userId).run();
       }
-      await env.DB.prepare(
-        `UPDATE user_subscriptions SET status = 'cancelled', site_count = 0, updated_at = ? WHERE user_id = ?`
-      ).bind(now, userId).run();
-    } else {
-      // Reduce quantity by one
-      try {
-        await paypal.reviseSubscription(env, sub.paypal_subscription_id, newCount);
-      } catch (err) {
-        console.error(`PayPal revise failed for user ${userId}:`, err);
-        // Best-effort — update DB anyway so site_count stays accurate
-      }
-      await env.DB.prepare(
-        `UPDATE user_subscriptions SET site_count = ?, updated_at = ? WHERE user_id = ?`
-      ).bind(newCount, now, userId).run();
     }
+  } catch (err) {
+    console.error(`Subscription update failed for user ${userId} after site deletion:`, err);
   }
 
   return json({ ok: true });
