@@ -24,7 +24,7 @@ const FAQS = [
       },
       {
         question: 'Is it really free?',
-        answer: 'Yes. One-off scans are completely free with no account required — just paste your URL and go. Free scans check up to 500 pages and 5,000 links. With a free account, weekly monitored scans check up to 1,000 pages and 10,000 links.',
+        answer: 'One-off scans are completely free with no account required — just paste your URL and go. Scans check up to 500 pages and 5,000 links. Weekly automated monitoring is a paid feature at $9/month per site (currently discounted from $19/month).',
       },
     ],
   },
@@ -54,15 +54,40 @@ const FAQS = [
     items: [
       {
         question: 'What is weekly monitoring?',
-        answer: 'Weekly monitoring automatically scans your site once a week and emails you a health report whenever new issues are detected. It is the easiest way to catch broken links introduced by content updates, third-party site changes, or server migrations before your visitors or Google notices them.',
+        answer: 'Weekly monitoring automatically scans your site once a week and emails you a health report whenever new issues are detected. Monitored scans check up to 1,000 pages and 10,000 links — twice the one-off scan limit. It is the easiest way to catch broken links introduced by content updates, third-party site changes, or server migrations before your visitors or Google notices them.',
       },
       {
         question: 'How do I set up scheduled scans?',
-        answer: 'Create a free account and go to My Account. Add your site URL and an optional notification email address. The first scan runs immediately, and subsequent scans run weekly from then on. You can manage multiple sites from the same account.',
+        answer: 'Create an account and go to My Account. Click "Subscribe & add site", enter your URL, and complete the PayPal checkout. The first scan runs within 24 hours, and subsequent scans run weekly from then on. You can monitor multiple sites from the same account — each site is billed at $9/month.',
       },
       {
         question: 'Can I suppress false positives?',
         answer: 'Yes. On any report from a monitored site, authenticated users see a "Not an issue" button next to each finding. Clicking it permanently hides that specific issue from future reports without affecting other issues of the same type.',
+      },
+    ],
+  },
+  {
+    group: 'Pricing & billing',
+    items: [
+      {
+        question: 'How much does weekly monitoring cost?',
+        answer: 'Weekly monitoring is $9/month per site — currently discounted from the regular price of $19/month. This is an early-access offer; lock in the lower rate now and it stays at $9/month for as long as you remain subscribed.',
+      },
+      {
+        question: 'How does billing work?',
+        answer: 'Billing is handled securely through PayPal. When you add your first site you subscribe to a monthly plan at $9/site. Each additional site added mid-billing-cycle is charged a prorated amount for the remaining days in the cycle, then included in your regular monthly renewal. You can pay with your PayPal balance, a linked bank account, or a debit/credit card.',
+      },
+      {
+        question: 'Can I cancel anytime?',
+        answer: 'Yes. You can cancel your subscription at any time from the My Account page. Your sites remain monitored for 3 days after cancellation, then monitoring pauses. There are no cancellation fees or lock-in periods.',
+      },
+      {
+        question: 'What happens if my payment fails?',
+        answer: 'If a payment fails you enter a 3-day grace period during which monitoring continues normally. If payment is not resolved within 3 days, monitoring for your sites pauses until the subscription is renewed. Your site data and history are retained for 30 days.',
+      },
+      {
+        question: 'Can I monitor multiple sites?',
+        answer: 'Yes. Each site is $9/month and is billed as part of a single consolidated subscription — you pay one monthly charge covering all your sites rather than separate charges per site. Add or remove sites at any time from the My Account page.',
       },
     ],
   },
@@ -144,8 +169,11 @@ export default function FAQ() {
 
         <div className="mt-12 card text-center py-10">
           <p className="text-slate-700 font-semibold text-lg mb-2">Ready to scan your site?</p>
-          <p className="text-slate-500 text-sm mb-6">Free, no account required. Results in under 2 minutes.</p>
-          <Link to="/" className="btn-primary">Scan my site →</Link>
+          <p className="text-slate-500 text-sm mb-6">Free one-off scan — no account required. Or add weekly monitoring from <span className="font-medium text-slate-700">$9/month</span>.</p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link to="/" className="btn-primary">Scan my site →</Link>
+            <Link to="/register" className="btn-secondary">Get weekly reports →</Link>
+          </div>
         </div>
       </main>
 

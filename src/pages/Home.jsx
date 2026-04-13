@@ -174,7 +174,7 @@ export default function Home() {
           ) : (
             <p className="mt-4 text-xs text-slate-400">
               Free scan — no account required. Up to <span className="font-medium text-slate-500">500 pages</span> and <span className="font-medium text-slate-500">5,000 links</span>.{' '}
-              <Link to="/register" className="text-brand-600 hover:underline">Sign up free</Link> for weekly monitoring with 1,000 pages.
+              <Link to="/register" className="text-brand-600 hover:underline">Create an account</Link> to add weekly monitoring from <span className="font-medium text-slate-500">$9/month</span>.
             </p>
           )}
         </div>
@@ -257,16 +257,65 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Pricing */}
+        <div className="max-w-2xl w-full mt-24">
+          <h2 className="text-2xl font-bold text-slate-900 mb-2 text-center">Simple, transparent pricing</h2>
+          <p className="text-slate-500 text-center mb-8 text-sm">One-off scans are always free. Add weekly monitoring for a flat monthly fee.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {/* Free tier */}
+            <div className="card flex flex-col gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1">One-off scan</p>
+                <p className="text-3xl font-bold text-slate-900">Free</p>
+                <p className="text-sm text-slate-500 mt-1">No account required</p>
+              </div>
+              <ul className="space-y-2 text-sm text-slate-600 flex-1">
+                {['Up to 500 pages per scan', 'Up to 5,000 links checked', 'Full issue report with health score', 'Instant results'].map(f => (
+                  <li key={f} className="flex items-start gap-2"><span className="text-green-500 font-bold mt-0.5">✓</span>{f}</li>
+                ))}
+              </ul>
+              <Link to="/" className="btn-secondary text-center text-sm">Scan my site →</Link>
+            </div>
+
+            {/* Paid tier */}
+            <div className="card flex flex-col gap-4 border-2 border-brand-500 relative">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-600 text-white text-xs font-semibold px-3 py-1 rounded-full">Early access</div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1">Weekly monitoring</p>
+                <p className="text-3xl font-bold text-slate-900">
+                  $9<span className="text-lg font-normal text-slate-500">/month</span>
+                </p>
+                <p className="text-sm text-slate-400 mt-1">
+                  <span className="line-through">$19/month</span> — limited time offer
+                </p>
+              </div>
+              <ul className="space-y-2 text-sm text-slate-600 flex-1">
+                {[
+                  'Per site, billed monthly',
+                  'Up to 1,000 pages per scan',
+                  'Up to 10,000 links checked',
+                  'Weekly automated scans',
+                  'Email alerts when issues appear',
+                  'Cancel anytime',
+                ].map(f => (
+                  <li key={f} className="flex items-start gap-2"><span className="text-green-500 font-bold mt-0.5">✓</span>{f}</li>
+                ))}
+              </ul>
+              <Link to="/register" className="btn-primary text-center text-sm">Get weekly reports →</Link>
+            </div>
+          </div>
+        </div>
+
         {/* FAQ teaser */}
         <div className="max-w-2xl w-full mt-20">
           <h2 className="text-2xl font-bold text-slate-900 mb-2 text-center">Common questions</h2>
           <p className="text-slate-500 text-center mb-8 text-sm">Quick answers — or see the full FAQ.</p>
           <div className="card">
             {[
-              { question: 'Is it really free?', answer: 'Yes. One-off scans are completely free — no account required. Free scans check up to 500 pages and 5,000 links. With a free account, weekly monitored scans check up to 1,000 pages and 10,000 links.' },
-              { question: 'Does it scan JavaScript-rendered content?', answer: 'No — we fetch raw HTML the same way Googlebot does on its first pass. This means we find the same broken links and missing pages that search engine crawlers encounter.' },
+              { question: 'Is one-off scanning really free?', answer: 'Yes. One-off scans are completely free with no account required — just paste your URL and go. Scans check up to 500 pages and 5,000 links.' },
+              { question: 'How much does weekly monitoring cost?', answer: 'Weekly monitoring is $9/month per site — currently discounted from $19/month. You are only charged for sites you actively monitor, and you can cancel at any time from your account page.' },
               { question: 'How long does a scan take?', answer: 'Most sites complete in 30 seconds to 2 minutes. Larger sites with hundreds of pages may take a little longer, but you can watch the progress live.' },
-              { question: 'What is weekly monitoring?', answer: 'With a free account you can add your site and we will automatically scan it every week and email you a health report. It is the easiest way to catch new issues before your visitors or Google does.' },
+              { question: 'What is weekly monitoring?', answer: 'Weekly monitoring automatically scans your site once a week and emails you a report when new issues are found. Monitored scans check up to 1,000 pages and 10,000 links — twice the free scan limit.' },
             ].map(faq => (
               <FAQAccordionItem key={faq.question} question={faq.question} answer={faq.answer} />
             ))}
