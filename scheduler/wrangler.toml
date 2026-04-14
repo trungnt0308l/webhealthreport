@@ -3,7 +3,7 @@ compatibility_date = "2024-09-23"
 main = "index.js"
 
 [triggers]
-crons = ["0 * * * *"]    # hourly launcher
+crons = ["*/15 * * * *"]  # every 15 min — paid plan allows up to every minute
 
 [[d1_databases]]
 binding = "DB"
@@ -20,7 +20,7 @@ max_batch_size     = 1
 max_batch_timeout  = 30
 max_retries        = 100    # Cloudflare max; each retry processes one batch (~30 subrequests)
 dead_letter_queue  = "webhealthreport-scans-dlq"
-max_concurrency    = 5
+max_concurrency    = 20
 
 [[queues.consumers]]
 queue          = "webhealthreport-scans-dlq"

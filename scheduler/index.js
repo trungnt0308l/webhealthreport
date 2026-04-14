@@ -58,7 +58,7 @@ async function launchDueScans(env) {
   const now = Math.floor(Date.now() / 1000);
   const due = await env.DB.prepare(
     `SELECT id, url, base_domain FROM monitored_sites
-     WHERE next_scan_at <= ? AND pending_scan_id IS NULL AND paused = 0 LIMIT 20`
+     WHERE next_scan_at <= ? AND pending_scan_id IS NULL AND paused = 0 LIMIT 100`
   ).bind(now).all();
 
   for (const site of due.results) {
@@ -107,22 +107,31 @@ async function runScan(env, msg) {
     return;
   }
 
-  // One processBatch call per invocation — keeps subrequest count well within
-  // Cloudflare's per-invocation limit.
-  try {
-    const { status } = await processBatch(env, scanId, siteId);
+  // Loop up to MAX_LOOPS processBatch calls per invocation.
+  // Hard cap keeps worst-case subrequests under 1,000 (4 × ~200).
+  // Wall-clock deadline is a secondary guard for slow/redirect-heavy sites.
+  const MAX_LOOPS   = 4;
+  const WALL_BUDGET = 25_000; // ms
+  const deadline    = Date.now() + WALL_BUDGET;
 
-    if (status === 'complete') {
-      await onScanComplete(env, msg, scanId, siteId);
-      return;
+  try {
+    for (let i = 0; i < MAX_LOOPS && Date.now() < deadline; i++) {
+      const { status } = await processBatch(env, scanId, siteId);
+
+      if (status === 'complete') {
+        await onScanComplete(env, msg, scanId, siteId);
+        return;
+      }
+      if (status === 'failed') {
+        await releaseSite(env, siteId, 'failed', 'Scan failed during processing');
+        msg.ack();
+        return;
+      }
+      // status === 'running' → loop again within this invocation
     }
-    if (status === 'failed') {
-      await releaseSite(env, siteId, 'failed', 'Scan failed during processing');
-      msg.ack();
-      return;
-    }
-    // Still running — send a new message (attempts reset to 0) instead of retry
-    // (which would consume from the 100-retry cap). This allows unlimited batches.
+
+    // Budget exhausted — send a new message (resets retry counter to 0) instead of
+    // retry (which consumes from the 100-retry cap). Allows unlimited total batches.
     await env.SCAN_QUEUE.send({ scanId, siteId });
     msg.ack();
 

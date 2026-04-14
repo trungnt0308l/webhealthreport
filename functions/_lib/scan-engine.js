@@ -8,8 +8,8 @@ import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInt
 import { checkBatch, fetchPage } from './checker.js';
 import { detectIssues } from './issues.js';
 
-const HTML_BATCH_SIZE = 2;
-const HEAD_BATCH_SIZE = 10;
+const HTML_BATCH_SIZE = 8;
+const HEAD_BATCH_SIZE = 50;
 const MAX_DEPTH = 5;
 const D1_CHUNK = 100;
 
@@ -113,7 +113,7 @@ export async function processBatch(env, scanId, siteId = null) {
   // Reset stale 'processing' items (> 10 min) — handles scheduler Worker restarts
   await env.DB.prepare(
     `UPDATE crawl_queue SET status = 'pending', claimed_at = NULL
-     WHERE scan_id = ? AND status = 'processing' AND claimed_at IS NOT NULL AND claimed_at < unixepoch() - 600`
+     WHERE scan_id = ? AND status = 'processing' AND claimed_at IS NOT NULL AND claimed_at < unixepoch() - 120`
   ).bind(scanId).run();
 
   const linksCounted = scan.links_checked || 0;
