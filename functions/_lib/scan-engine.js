@@ -291,7 +291,7 @@ export async function processBatch(env, scanId, siteId = null) {
       if (headRetrySet.has(r.id)) continue; // will be reset to pending for retry
       newLinksChecked++;
       const isFailed = r.status === null || (r.status >= 400 && !BOT_BLOCKED_STATUSES.has(r.status));
-      const isChain = (r.redirectCount ?? 0) >= 2;
+      const isChain = (r.redirectCount ?? 0) >= 5;
       if (isFailed || isChain) {
         linkCheckInserts.push(env.DB.prepare(
           `INSERT INTO link_checks (scan_id, source_url, target_url, normalized_target_url, target_type, response_status, redirect_count, final_url, response_ms, anchor_text)
@@ -340,6 +340,19 @@ export async function processBatch(env, scanId, siteId = null) {
       `UPDATE scans SET pages_crawled = pages_crawled + ?, links_checked = links_checked + ?, current_step = ? WHERE id = ?`
     ).bind(newPages, newLinksChecked, currentStep, scanId),
   ]);
+
+  // If no items were queued for retry, check whether the queue is now fully drained
+  // and finalize immediately — avoids needing an extra empty-batch round-trip.
+  if (retryUpdates.length === 0) {
+    const remaining = await env.DB.prepare(
+      `SELECT COUNT(*) AS cnt FROM crawl_queue
+       WHERE scan_id = ? AND status IN ('pending', 'processing')`
+    ).bind(scanId).first();
+    if (remaining.cnt === 0) {
+      await finalize(env, scan, scanId, siteId);
+      return { status: 'complete', recentChecks };
+    }
+  }
 
   return { status: 'running', recentChecks };
 }
