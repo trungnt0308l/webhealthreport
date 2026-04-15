@@ -135,7 +135,7 @@ export async function processBatch(env, scanId, siteId = null) {
              ORDER BY depth, id
              LIMIT ?
            )
-           RETURNING id, url, normalized_url, url_type, source_url, depth, anchor_text`
+           RETURNING id, url, normalized_url, url_type, source_url, depth, anchor_text, retry_count`
         ).bind(scanId, htmlLimit).all()
       : { results: [] },
     env.DB.prepare(
@@ -200,11 +200,17 @@ export async function processBatch(env, scanId, siteId = null) {
 
   const htmlResults = await Promise.all(htmlItems.map(processHtmlItem));
 
+  // Items that timed out on their first attempt are queued for one retry.
+  const htmlRetrySet = new Set(
+    htmlResults.filter(r => !r.ok && (r.item.retry_count || 0) < 1).map(r => r.item.id)
+  );
+
   const baseDomain = scan.base_domain;
   let pagesRemaining = Math.max(0, LIMITS.maxPages - pagesCounted);
   let linksRemaining = Math.max(0, LIMITS.maxLinks - linksCounted);
 
   for (const r of htmlResults) {
+    if (htmlRetrySet.has(r.item.id)) continue; // will be reset to pending for retry
     const { item } = r;
     const absUrl = item.normalized_url;
     const newDepth = (item.depth || 1) + 1;
@@ -267,15 +273,22 @@ export async function processBatch(env, scanId, siteId = null) {
   }
 
   let headResults = [];
+  let headRetrySet = new Set();
   if (headItems.length > 0) {
     headResults = await checkBatch(headItems.map(i => ({
+      id: i.id,
+      retry_count: i.retry_count || 0,
       url: i.url,
       normalized_url: i.normalized_url,
       url_type: i.url_type,
       source_url: i.source_url || scan.url,
       anchor_text: i.anchor_text || '',
     })));
+    headRetrySet = new Set(
+      headResults.filter(r => r.status === null && (r.retry_count || 0) < 1).map(r => r.id)
+    );
     for (const r of headResults) {
+      if (headRetrySet.has(r.id)) continue; // will be reset to pending for retry
       newLinksChecked++;
       const isFailed = r.status === null || (r.status >= 400 && !BOT_BLOCKED_STATUSES.has(r.status));
       const isChain = (r.redirectCount ?? 0) >= 2;
@@ -293,9 +306,22 @@ export async function processBatch(env, scanId, siteId = null) {
     ...headResults.map(r => ({ url: r.url, type: r.url_type, status: r.status, ms: r.responseMs || 0 })),
   ].slice(-20);
 
-  const doneUpdates = items.map(i =>
-    env.DB.prepare(`UPDATE crawl_queue SET status = 'done' WHERE id = ?`).bind(i.id)
-  );
+  const retryIds = new Set([...htmlRetrySet, ...headRetrySet]);
+  const doneUpdates = [];
+  const retryUpdates = [];
+  for (const i of items) {
+    if (retryIds.has(i.id)) {
+      retryUpdates.push(
+        env.DB.prepare(
+          `UPDATE crawl_queue SET status = 'pending', claimed_at = NULL, retry_count = retry_count + 1 WHERE id = ?`
+        ).bind(i.id)
+      );
+    } else {
+      doneUpdates.push(
+        env.DB.prepare(`UPDATE crawl_queue SET status = 'done' WHERE id = ?`).bind(i.id)
+      );
+    }
+  }
 
   const hasExternal = headItems.some(i => i.url_type === 'external');
   const hasImages = headItems.some(i => i.url_type === 'image');
@@ -308,6 +334,7 @@ export async function processBatch(env, scanId, siteId = null) {
     ...pageInserts,
     ...linkCheckInserts,
     ...doneUpdates,
+    ...retryUpdates,
     ...queueInserts,
     env.DB.prepare(
       `UPDATE scans SET pages_crawled = pages_crawled + ?, links_checked = links_checked + ?, current_step = ? WHERE id = ?`

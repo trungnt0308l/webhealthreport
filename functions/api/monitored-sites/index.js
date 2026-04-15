@@ -35,9 +35,12 @@ export async function onRequestGet({ request, env }) {
   if (denied) return denied;
 
   const result = await env.DB.prepare(
-    `SELECT id, url, base_domain, emails, last_scan_id, pending_scan_id, next_scan_at, created_at,
-            last_scan_status, last_scan_error, user_id
-     FROM monitored_sites ORDER BY created_at DESC`
+    `SELECT ms.id, ms.url, ms.base_domain, ms.emails, ms.last_scan_id, ms.pending_scan_id,
+            ms.next_scan_at, ms.created_at, ms.last_scan_status, ms.last_scan_error, ms.user_id,
+            s.finished_at AS last_scan_at
+     FROM monitored_sites ms
+     LEFT JOIN scans s ON s.id = ms.last_scan_id
+     ORDER BY ms.created_at DESC`
   ).all();
 
   return json(request, env, { sites: result.results || [] });

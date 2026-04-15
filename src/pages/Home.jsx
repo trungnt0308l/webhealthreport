@@ -279,7 +279,11 @@ export default function Home() {
               </ul>
               <button
                 type="button"
-                onClick={() => document.getElementById('scan-form').scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => {
+                  const el = document.getElementById('scan-form');
+                  const top = el.getBoundingClientRect().top + window.scrollY - 120;
+                  window.scrollTo({ top, behavior: 'smooth' });
+                }}
                 className="btn-secondary text-sm"
               >Scan my site →</button>
             </div>

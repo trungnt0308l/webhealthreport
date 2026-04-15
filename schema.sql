@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS crawl_queue (
   status TEXT NOT NULL DEFAULT 'pending',
   anchor_text TEXT NOT NULL DEFAULT '',
   claimed_at INTEGER,
+  retry_count INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (scan_id) REFERENCES scans(id)
 );
 

@@ -600,6 +600,7 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
                   <th className="text-left px-5 py-2.5">Domain</th>
                   <th className="text-left px-5 py-2.5">Notification emails</th>
                   <th className="text-left px-5 py-2.5">Status</th>
+                  <th className="text-left px-5 py-2.5">Last scan</th>
                   <th className="text-left px-5 py-2.5">Next scan</th>
                   <th className="text-left px-5 py-2.5">Last report</th>
                   <th className="px-5 py-2.5"></th>
@@ -627,6 +628,9 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
                               : site.last_scan_status === 'failed'
                                 ? <span className="text-red-500 text-xs font-medium" title={site.last_scan_error || ''}>Failed{site.last_scan_error ? ' ⓘ' : ''}</span>
                                 : <span className="text-slate-400 text-xs">Never run</span>}
+                      </td>
+                      <td className="px-5 py-3 text-slate-500 whitespace-nowrap text-sm">
+                        {formatDate(site.last_scan_at)}
                       </td>
                       <td className="px-5 py-3 text-slate-500 whitespace-nowrap text-sm">
                         {site.paused || site.pending_scan_id ? '—' : formatDate(site.next_scan_at)}
