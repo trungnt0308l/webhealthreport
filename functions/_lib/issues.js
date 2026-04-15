@@ -25,7 +25,7 @@ export function detectIssues(scanId, pages, linkChecks, internalSourceMap = null
     if (lc.target_type === 'internal') {
       if (lc.response_status !== null && lc.response_status >= 400)
         pushTo(internalBroken, key, lc);
-      if (lc.redirect_count >= 2)
+      if (lc.redirect_count >= 5)
         pushTo(redirectChainMap, key, lc);
     } else if (lc.target_type === 'image') {
       if ((lc.response_status === null || lc.response_status >= 400) &&

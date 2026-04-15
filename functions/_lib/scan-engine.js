@@ -50,7 +50,7 @@ async function finalize(env, scan, scanId, siteId = null) {
     ).bind(scanId).all(),
     env.DB.prepare(
       `SELECT 'internal' AS target_type, normalized_target_url, source_url, NULL AS anchor_text, response_status, redirect_count, final_url
-       FROM link_checks WHERE scan_id = ? AND target_type = 'internal' AND redirect_count >= 2`
+       FROM link_checks WHERE scan_id = ? AND target_type = 'internal' AND redirect_count >= 5`
     ).bind(scanId).all(),
     env.DB.prepare(
       `SELECT 'external' AS target_type, normalized_target_url, source_url, anchor_text, response_status, 0 AS redirect_count, NULL AS final_url
@@ -221,7 +221,7 @@ export async function processBatch(env, scanId, siteId = null) {
     ).bind(scanId, absUrl, absUrl, r.statusCode, r.contentType || '', r.title, r.visibleTextLength, r.responseMs, r.redirectCount, r.finalUrl || absUrl));
 
     const isBroken = r.statusCode === null || r.statusCode >= 400;
-    const isChain = r.redirectCount >= 2;
+    const isChain = r.redirectCount >= 5;
     if (isBroken || isChain) {
       linkCheckInserts.push(env.DB.prepare(
         `INSERT INTO link_checks (scan_id, source_url, target_url, normalized_target_url, target_type, response_status, redirect_count, final_url, response_ms, anchor_text)

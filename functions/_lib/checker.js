@@ -7,7 +7,7 @@
  */
 
 const FETCH_TIMEOUT_MS = 8000;
-const MAX_REDIRECTS = 10;
+const MAX_REDIRECTS = 15;
 
 // Full browser header set — sending only User-Agent triggers bot detection on
 // many WAFs (Cloudflare, Akamai, DataDome). These headers match Chrome 146 on Windows.
