@@ -57,11 +57,14 @@ export async function onRequestPost({ request, env }) {
 
   const baseDomain = getBaseDomain(normalizedStart);
 
-  // Global concurrent scan cap — prevents saturation via many different domains
+  // Global concurrent scan cap — only count scans started in the last 30 minutes
+  // (older ones are abandoned browser tabs, not active CPU consumers)
   const active = await env.DB.prepare(
-    `SELECT COUNT(*) as n FROM scans WHERE status IN ('pending', 'running')`
+    `SELECT COUNT(*) as n FROM scans
+     WHERE status IN ('pending', 'running')
+       AND started_at > unixepoch() - 1800`
   ).first();
-  if (active.n >= 5) {
+  if (active.n >= 10) {
     return corsJson(request, env, { error: 'Server busy. Please try again shortly.' }, 503);
   }
 

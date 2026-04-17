@@ -9,6 +9,7 @@ export default {
     ctx.waitUntil(Promise.all([
       launchDueScans(env),
       enforceGracePeriods(env),
+      cleanupStuckScans(env),
     ]));
   },
 
@@ -111,8 +112,8 @@ async function runScan(env, msg) {
   // Loop up to MAX_LOOPS processBatch calls per invocation.
   // Hard cap keeps worst-case subrequests under 1,000 (4 × ~200).
   // Wall-clock deadline is a secondary guard for slow/redirect-heavy sites.
-  const MAX_LOOPS   = 4;
-  const WALL_BUDGET = 25_000; // ms
+  const MAX_LOOPS   = 6;
+  const WALL_BUDGET = 28_000; // ms
   const deadline    = Date.now() + WALL_BUDGET;
 
   try {
@@ -181,6 +182,27 @@ async function enforceGracePeriods(env) {
   for (const row of (deletable.results || [])) {
     await env.DB.prepare(`DELETE FROM monitored_sites WHERE user_id = ?`).bind(row.user_id).run();
     await env.DB.prepare(`DELETE FROM user_subscriptions WHERE user_id = ?`).bind(row.user_id).run();
+  }
+}
+
+async function cleanupStuckScans(env) {
+  const cutoff = Math.floor(Date.now() / 1000) - 3600; // 1 hour
+
+  const { meta } = await env.DB.prepare(
+    `UPDATE scans SET status = 'failed',
+     error_message = 'Scan timed out after 1 hour',
+     finished_at = unixepoch()
+     WHERE status IN ('pending', 'running') AND started_at < ?`
+  ).bind(cutoff).run();
+
+  if (meta.changes > 0) {
+    await env.DB.prepare(
+      `UPDATE monitored_sites SET pending_scan_id = NULL
+       WHERE pending_scan_id IN (
+         SELECT id FROM scans WHERE status = 'failed'
+           AND finished_at >= unixepoch() - 5
+       )`
+    ).run();
   }
 }
 
