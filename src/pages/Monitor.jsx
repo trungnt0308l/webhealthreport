@@ -1,21 +1,22 @@
 import { useEffect, useState } from 'react';
 import { getMonitoredSites, addMonitoredSite, removeMonitoredSite, updateMonitoredSiteEmails, debugCheckUrl } from '../lib/api.js';
+import { formatDate } from '../lib/format.js';
+import EmailEditCell from '../components/EmailEditCell.jsx';
 
-function formatDate(unixTs) {
-  if (!unixTs) return '—';
-  return new Date(unixTs * 1000).toLocaleString('en-US', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
-function Header() {
+function Header({ onSignOut }) {
   return (
     <header className="border-b border-slate-200 bg-white px-6 py-4">
-      <div className="max-w-5xl mx-auto flex items-center gap-2">
-        <div className="w-7 h-7 bg-brand-600 rounded-md flex items-center justify-center text-white font-bold text-sm">W</div>
-        <span className="font-semibold text-slate-800">Website Health Report</span>
-        <span className="ml-2 text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">Admin</span>
+      <div className="max-w-5xl mx-auto flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 bg-brand-600 rounded-md flex items-center justify-center text-white font-bold text-sm">W</div>
+          <span className="font-semibold text-slate-800">Website Health Report</span>
+          <span className="ml-2 text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">Admin</span>
+        </div>
+        {onSignOut && (
+          <button onClick={onSignOut} className="text-sm text-slate-500 hover:text-slate-700 hover:underline">
+            Sign out
+          </button>
+        )}
       </div>
     </header>
   );
@@ -66,61 +67,6 @@ function LoginForm({ onSuccess }) {
           </form>
         </div>
       </main>
-    </div>
-  );
-}
-
-function EmailEditCell({ siteId, emails, onSave }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(emails.join(', '));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleSave() {
-    setError('');
-    const list = value.split(',').map(s => s.trim()).filter(Boolean);
-    if (list.length === 0) { setError('Enter at least one email.'); return; }
-    setSaving(true);
-    try {
-      await onSave(siteId, list);
-      setEditing(false);
-    } catch (err) {
-      setError(err.message || 'Failed to save.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleCancel() {
-    setValue(emails.join(', '));
-    setError('');
-    setEditing(false);
-  }
-
-  if (!editing) {
-    return (
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-slate-500 text-xs truncate" title={emails.join(', ')}>{emails.join(', ')}</span>
-        <button onClick={() => setEditing(true)} className="text-xs text-brand-600 hover:underline shrink-0">Edit</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          className="border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 w-64"
-          disabled={saving}
-          autoFocus
-        />
-        <button onClick={handleSave} disabled={saving} className="text-xs btn-primary px-2 py-1">{saving ? 'Saving…' : 'Save'}</button>
-        <button onClick={handleCancel} disabled={saving} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
-      </div>
-      {error && <p className="text-red-600 text-xs">{error}</p>}
     </div>
   );
 }
@@ -279,7 +225,7 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Header />
+      <Header onSignOut={onSignOut} />
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-6">
 
         {/* Add site form */}
@@ -316,10 +262,7 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
         <div className="card p-0 overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
             <h2 className="font-semibold text-slate-800 text-sm">Monitored sites</h2>
-            <div className="flex items-center gap-4">
-              <span className="text-xs text-slate-400">{sites.length} site{sites.length !== 1 ? 's' : ''}</span>
-              <button onClick={onSignOut} className="text-xs text-slate-400 hover:text-slate-600 hover:underline">Sign out</button>
-            </div>
+            <span className="text-xs text-slate-400">{sites.length} site{sites.length !== 1 ? 's' : ''}</span>
           </div>
 
           {loading ? (
@@ -337,7 +280,6 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
                     <th className="text-left px-5 py-2.5">Status</th>
                     <th className="text-left px-5 py-2.5">Last scan</th>
                     <th className="text-left px-5 py-2.5">Next scan</th>
-                    <th className="text-left px-5 py-2.5">Last report</th>
                     <th className="px-5 py-2.5"></th>
                   </tr>
                 </thead>
@@ -366,18 +308,15 @@ function MonitorDashboard({ monitorKey, onSignOut }) {
                                 ? <span className="text-red-500 text-xs font-medium" title={site.last_scan_error || ''}>Failed{site.last_scan_error ? ' ⓘ' : ''}</span>
                                 : <span className="text-slate-400 text-xs">Never run</span>}
                         </td>
-                        <td className="px-5 py-3 text-slate-500 whitespace-nowrap text-sm">
-                          {formatDate(site.last_scan_at)}
+                        <td className="px-5 py-3 whitespace-nowrap text-sm">
+                          {site.last_scan_id
+                            ? <a href={`/report/${site.last_scan_id}`} className="text-brand-600 hover:underline">{formatDate(site.last_scan_at)}</a>
+                            : <span className="text-slate-500">{formatDate(site.last_scan_at)}</span>}
                         </td>
                         <td className="px-5 py-3 text-slate-500 whitespace-nowrap text-sm">
                           {site.pending_scan_id
                             ? '—'
                             : formatDate(site.next_scan_at)}
-                        </td>
-                        <td className="px-5 py-3 whitespace-nowrap">
-                          {site.last_scan_id
-                            ? <a href={`/report/${site.last_scan_id}`} className="text-brand-600 hover:underline text-sm">View report</a>
-                            : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-5 py-3 text-right">
                           <button

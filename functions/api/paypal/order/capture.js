@@ -13,18 +13,12 @@
  *    (failed_captures table logs partial failures for support resolution)
  */
 import { requireAuth, json } from '../../../_lib/auth.js';
-import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { corsOptions } from '../../../_lib/response.js';
 import { getBaseDomain } from '../../../_lib/crawl.js';
+import { generateId } from '../../../_lib/constants.js';
 import * as paypal from '../../../_lib/paypal.js';
 
-export const onRequestOptions = ({ request, env }) =>
-  new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 'POST, OPTIONS');
 
 export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   let body;
@@ -67,7 +61,7 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   const capturedAmount = captureResult
     ?.purchase_units?.[0]?.payments?.captures?.[0]?.amount?.value;
   if (capturedAmount !== expectedAmount) {
-    const failId = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+    const failId = generateId();
     await env.DB.prepare(
       `INSERT INTO failed_captures (id, user_id, order_id, error, created_at)
        VALUES (?, ?, ?, ?, ?)`
@@ -86,7 +80,7 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
 
   if (!subResult) {
     // Subscription gone between order creation and capture — very unlikely
-    const failId = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+    const failId = generateId();
     await env.DB.prepare(
       `INSERT INTO failed_captures (id, user_id, order_id, error, created_at)
        VALUES (?, ?, ?, 'No active subscription at capture time', ?)`
@@ -101,7 +95,7 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
     await paypal.reviseSubscription(env, subId, newCount);
   } catch (err) {
     // Log for manual reconciliation but don't fail — user already paid
-    const failId = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+    const failId = generateId();
     await env.DB.prepare(
       `INSERT INTO failed_captures (id, user_id, order_id, paypal_sub_id, expected_count, error, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -113,7 +107,7 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   // ── Step 4: Add the monitored site ─────────────────────────────────────────
   const emails     = JSON.parse(emailsJson);
   const baseDomain = getBaseDomain(startUrl);
-  const siteId     = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  const siteId     = generateId();
   const nextScanAt = now + Math.floor(Math.random() * 86400);
 
   await env.DB.prepare(

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { getScanReport, addSuppression } from '../lib/api.js';
-import { scoreColor, scoreBgColor, severityBadgeClass, gradeDescription } from '../lib/format.js';
+import { scoreColor, scoreBgColor, severityBadgeClass, gradeDescription, shortUrl } from '../lib/format.js';
 
 function decodeEntities(str) {
   if (!str || !str.includes('&')) return str;
@@ -18,16 +18,6 @@ function statusCodeColor(code) {
   return 'text-red-500';
 }
 
-function shortUrl(url, maxLen = 60) {
-  if (!url) return '';
-  try {
-    const u = new URL(url);
-    const full = u.hostname + u.pathname + u.search;
-    return full.length > maxLen ? full.slice(0, maxLen) + '…' : full;
-  } catch {
-    return url.length > maxLen ? url.slice(0, maxLen) + '…' : url;
-  }
-}
 
 function formatDetectedOn(ts) {
   if (!ts) return null;

@@ -227,13 +227,3 @@ export async function addSuppression(token, siteId, issueType, targetUrl) {
   return res.json();
 }
 
-export async function removeSuppression(token, siteId, issueType, targetUrl) {
-  const res = await fetch(`${BASE}/user/sites/${siteId}/suppressions`, {
-    method: 'DELETE',
-    headers: bearerHeaders(token, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ issueType, targetUrl }),
-  });
-  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
-  if (!res.ok) throw new Error('Failed to remove suppression');
-  return res.json();
-}

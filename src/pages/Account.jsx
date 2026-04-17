@@ -5,24 +5,11 @@ import {
   getSubscription, createPayPalSubscription, activateSubscription,
   cancelSubscription, createProRateOrder, captureProRateOrder,
 } from '../lib/api.js';
+import { formatDate, formatDateShort } from '../lib/format.js';
+import EmailEditCell from '../components/EmailEditCell.jsx';
 
 const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID
   || 'ARBvCNAx34VDcfk1QTFnpg6Bl19KSGv-TfJkqNxIZPH2k4i6M5ueZKdMPIBzL19dO5ZHWqZMd7EO8WQY';
-
-function formatDate(unixTs) {
-  if (!unixTs) return '—';
-  return new Date(unixTs * 1000).toLocaleString('en-US', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
-function formatDateShort(unixTs) {
-  if (!unixTs) return '—';
-  return new Date(unixTs * 1000).toLocaleDateString('en-US', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
 
 // Dynamically load the PayPal JS SDK for subscriptions
 function loadPayPalSDK() {
@@ -78,45 +65,6 @@ function ProfileCard({ user }) {
           <p className="text-sm text-slate-500 mt-0.5 truncate">{user.email}</p>
         </div>
       </div>
-    </div>
-  );
-}
-
-function EmailEditCell({ siteId, emails, onSave }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(emails.join(', '));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleSave() {
-    setError('');
-    const list = value.split(',').map(s => s.trim()).filter(Boolean);
-    if (list.length === 0) { setError('Enter at least one email.'); return; }
-    setSaving(true);
-    try { await onSave(siteId, list); setEditing(false); }
-    catch (err) { setError(err.message || 'Failed to save.'); }
-    finally { setSaving(false); }
-  }
-
-  if (!editing) {
-    return (
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-slate-500 text-xs truncate" title={emails.join(', ')}>{emails.join(', ')}</span>
-        <button onClick={() => setEditing(true)} className="text-xs text-brand-600 hover:underline shrink-0">Edit</button>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2 flex-wrap">
-        <input type="text" value={value} onChange={e => setValue(e.target.value)}
-          className="border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 w-64"
-          disabled={saving} autoFocus />
-        <button onClick={handleSave} disabled={saving} className="text-xs btn-primary px-2 py-1">{saving ? 'Saving…' : 'Save'}</button>
-        <button onClick={() => { setValue(emails.join(', ')); setError(''); setEditing(false); }}
-          disabled={saving} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
-      </div>
-      {error && <p className="text-red-600 text-xs">{error}</p>}
     </div>
   );
 }
@@ -602,7 +550,6 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
                   <th className="text-left px-5 py-2.5">Status</th>
                   <th className="text-left px-5 py-2.5">Last scan</th>
                   <th className="text-left px-5 py-2.5">Next scan</th>
-                  <th className="text-left px-5 py-2.5">Last report</th>
                   <th className="px-5 py-2.5"></th>
                 </tr>
               </thead>
@@ -629,16 +576,13 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
                                 ? <span className="text-red-500 text-xs font-medium" title={site.last_scan_error || ''}>Failed{site.last_scan_error ? ' ⓘ' : ''}</span>
                                 : <span className="text-slate-400 text-xs">Never run</span>}
                       </td>
-                      <td className="px-5 py-3 text-slate-500 whitespace-nowrap text-sm">
-                        {formatDate(site.last_scan_at)}
+                      <td className="px-5 py-3 whitespace-nowrap text-sm">
+                        {site.last_scan_id
+                          ? <a href={`/report/${site.last_scan_id}`} className="text-brand-600 hover:underline">{formatDate(site.last_scan_at)}</a>
+                          : <span className="text-slate-500">{formatDate(site.last_scan_at)}</span>}
                       </td>
                       <td className="px-5 py-3 text-slate-500 whitespace-nowrap text-sm">
                         {site.paused || site.pending_scan_id ? '—' : formatDate(site.next_scan_at)}
-                      </td>
-                      <td className="px-5 py-3 whitespace-nowrap">
-                        {site.last_scan_id
-                          ? <a href={`/report/${site.last_scan_id}`} className="text-brand-600 hover:underline text-sm">View report</a>
-                          : <span className="text-slate-400 text-sm">—</span>}
                       </td>
                       <td className="px-5 py-3 text-right">
                         <button onClick={() => handleRemove(site.id)}

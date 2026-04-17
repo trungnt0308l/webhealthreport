@@ -2,6 +2,7 @@ import { bootstrapScan }   from '../functions/_lib/scan-bootstrap.js';
 import { processBatch }    from '../functions/_lib/scan-engine.js';
 import { sendReportEmail } from './email.js';
 import { generateReport }  from '../functions/_lib/report.js';
+import { generateId }      from '../functions/_lib/constants.js';
 
 export default {
   async scheduled(event, env, ctx) {
@@ -62,7 +63,7 @@ async function launchDueScans(env) {
   ).bind(now).all();
 
   for (const site of due.results) {
-    const scanId = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+    const scanId = generateId();
     const now = Math.floor(Date.now() / 1000);
 
     // Pre-insert a scan stub so the FK on monitored_sites.pending_scan_id is satisfied

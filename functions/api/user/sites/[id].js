@@ -6,19 +6,11 @@
  * even if they guess the ID. Returns 404 for both "not found" and "not yours".
  */
 import { requireAuth, json } from '../../../_lib/auth.js';
-import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { corsOptions } from '../../../_lib/response.js';
+import { EMAIL_RE } from '../../../_lib/constants.js';
 import * as paypal from '../../../_lib/paypal.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-export const onRequestOptions = ({ request, env }) =>
-  new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'DELETE, PATCH, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 'DELETE, PATCH, OPTIONS');
 
 export const onRequestPatch = requireAuth(async ({ params, request, env, data }) => {
   let body;

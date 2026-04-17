@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getScanStatus } from '../lib/api.js';
+import { shortUrl } from '../lib/format.js';
 
 function statusColor(code) {
   if (code === null || code === undefined) return 'text-slate-400';
@@ -13,16 +14,6 @@ function typeLabel(type) {
   if (type === 'internal') return 'page';
   if (type === 'image') return 'img';
   return 'ext';
-}
-
-function shortUrl(url) {
-  try {
-    const u = new URL(url);
-    const full = u.hostname + u.pathname;
-    return full.length > 55 ? full.slice(0, 55) + '…' : full;
-  } catch {
-    return url.length > 55 ? url.slice(0, 55) + '…' : url;
-  }
 }
 
 export default function ScanProgress() {

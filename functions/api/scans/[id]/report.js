@@ -4,15 +4,8 @@
  * when the scan belongs to a monitored site.
  */
 import { generateReport } from '../../../_lib/report.js';
+import { corsJson } from '../../../_lib/response.js';
 import { getAllowedOrigin } from '../../../_lib/cors.js';
-
-function corsResponse(request, env, body, init = {}) {
-  const headers = new Headers(init.headers || {});
-  headers.set('Access-Control-Allow-Origin', getAllowedOrigin(request, env));
-  headers.set('Content-Type', 'application/json');
-  headers.set('X-Content-Type-Options', 'nosniff');
-  return new Response(body, { ...init, headers });
-}
 
 export async function onRequestGet({ params, request, env }) {
   const { id: scanId } = params;
@@ -22,11 +15,11 @@ export async function onRequestGet({ params, request, env }) {
   ).bind(scanId).first();
 
   if (!scan) {
-    return corsResponse(request, env, JSON.stringify({ error: 'Not found' }), { status: 404 });
+    return corsJson(request, env, { error: 'Not found' }, 404);
   }
 
   if (scan.status !== 'complete') {
-    return corsResponse(request, env, JSON.stringify({ error: 'Report not ready', status: scan.status }), { status: 202 });
+    return corsJson(request, env, { error: 'Report not ready', status: scan.status }, 202);
   }
 
   const siteId = scan.site_id || null;
@@ -39,11 +32,18 @@ export async function onRequestGet({ params, request, env }) {
     ).bind(scanId).first();
 
     if (cached?.rendered_summary_json) {
-      return corsResponse(request, env, cached.rendered_summary_json);
+      // Return pre-serialized JSON directly to avoid double-serialization
+      return new Response(cached.rendered_summary_json, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
     }
   }
 
   // Generate (or regenerate with live overlay for monitored sites)
   const summary = await generateReport(env, scanId, null, null, null, siteId);
-  return corsResponse(request, env, JSON.stringify(summary));
+  return corsJson(request, env, summary);
 }

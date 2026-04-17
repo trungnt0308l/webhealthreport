@@ -4,17 +4,10 @@
  * DELETE /api/paypal/subscription — cancel subscription (starts 3-day grace period)
  */
 import { requireAuth, json } from '../../../_lib/auth.js';
-import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { corsOptions } from '../../../_lib/response.js';
 import * as paypal from '../../../_lib/paypal.js';
 
-export const onRequestOptions = ({ request, env }) =>
-  new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 'GET, POST, DELETE, OPTIONS');
 
 export const onRequestGet = requireAuth(async ({ env, data }) => {
   const sub = await env.DB.prepare(

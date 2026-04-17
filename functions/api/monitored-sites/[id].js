@@ -3,29 +3,13 @@
  * DELETE /api/monitored-sites/:id — remove a monitored site (admin)
  */
 import { adminAuthCheck } from '../../_lib/monitor-auth.js';
-import { getAllowedOrigin } from '../../_lib/cors.js';
+import { corsJson, corsOptions } from '../../_lib/response.js';
+import { EMAIL_RE } from '../../_lib/constants.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-function json(request, env, data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
-}
+const json = corsJson;
 
 export function onRequestOptions({ request, env }) {
-  return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'DELETE, PATCH, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+  return corsOptions(request, env, 'DELETE, PATCH, OPTIONS');
 }
 
 export async function onRequestPatch({ params, request, env }) {

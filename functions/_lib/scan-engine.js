@@ -6,7 +6,7 @@
  */
 import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInternalUrl, isHtmlContentType, isTrackingUrl } from './crawl.js';
 import { checkBatch, fetchPage } from './checker.js';
-import { detectIssues } from './issues.js';
+import { detectIssues, BOT_BLOCKED_STATUSES } from './issues.js';
 
 const HTML_BATCH_SIZE = 8;
 const HEAD_BATCH_SIZE = 50;
@@ -15,7 +15,6 @@ const D1_CHUNK = 100;
 
 const FREE_LIMITS    = { maxPages: 500,  maxLinks: 5000,  maxLinksPerPage: 250, maxImagesPerPage: 250 };
 const PREMIUM_LIMITS = { maxPages: 1000, maxLinks: 10000, maxLinksPerPage: 250, maxImagesPerPage: 250 };
-const BOT_BLOCKED_STATUSES = new Set([403, 426, 429, 526, 530, 999]);
 
 async function batchAll(env, stmts) {
   for (let i = 0; i < stmts.length; i += D1_CHUNK) {
@@ -193,7 +192,7 @@ export async function processBatch(env, scanId, siteId = null) {
       }
 
       return { ok: true, statusCode, contentType, title, visibleTextLength, responseMs, finalUrl, redirectCount: redirectCount || 0, links, images, item };
-    } catch {
+    } catch { /* network/timeout error — treat as unreachable, retry logic handles it */
       return { ok: false, statusCode: null, title: '', visibleTextLength: 0, responseMs: 0, finalUrl: absUrl, redirectCount: 0, links: [], images: [], item };
     }
   }

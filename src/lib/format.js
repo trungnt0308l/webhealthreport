@@ -12,25 +12,39 @@ export function scoreBgColor(score) {
   return 'bg-red-50 border-red-200';
 }
 
-export function severityLabel(severity) {
-  if (severity === 'critical') return 'Critical';
-  if (severity === 'important') return 'Important';
-  return 'Minor';
-}
-
 export function severityBadgeClass(severity) {
   if (severity === 'critical') return 'badge-critical';
   if (severity === 'important') return 'badge-important';
   return 'badge-minor';
 }
 
-export function severityBorderClass(severity) {
-  if (severity === 'critical') return 'border-l-red-400';
-  if (severity === 'important') return 'border-l-amber-400';
-  return 'border-l-slate-300';
-}
-
 export function gradeDescription(grade) {
   const map = { A: 'Excellent', B: 'Good', C: 'Needs attention', D: 'Poor', F: 'Critical issues' };
   return map[grade] || '';
+}
+
+export function formatDate(unixTs) {
+  if (!unixTs) return '—';
+  return new Date(unixTs * 1000).toLocaleString('en-US', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+export function formatDateShort(unixTs) {
+  if (!unixTs) return '—';
+  return new Date(unixTs * 1000).toLocaleDateString('en-US', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  });
+}
+
+export function shortUrl(url, maxLen = 60) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    const full = u.hostname + u.pathname + u.search;
+    return full.length > maxLen ? full.slice(0, maxLen) + '…' : full;
+  } catch {
+    return url.length > maxLen ? url.slice(0, maxLen) + '…' : url;
+  }
 }

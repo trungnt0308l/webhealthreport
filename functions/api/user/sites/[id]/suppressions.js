@@ -6,16 +6,9 @@
  * The WHERE user_id = ? clause prevents IDOR — users cannot suppress issues on other sites.
  */
 import { requireAuth, json } from '../../../../_lib/auth.js';
-import { getAllowedOrigin } from '../../../../_lib/cors.js';
+import { corsOptions } from '../../../../_lib/response.js';
 
-export const onRequestOptions = ({ request, env }) =>
-  new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 'POST, DELETE, OPTIONS');
 
 async function parseBody(request) {
   try {

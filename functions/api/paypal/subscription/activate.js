@@ -11,20 +11,12 @@
  *  - INSERT OR IGNORE on user_subscriptions prevents duplicate rows on retry
  */
 import { requireAuth, json } from '../../../_lib/auth.js';
-import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { corsOptions } from '../../../_lib/response.js';
 import { normalizeUrl, getBaseDomain } from '../../../_lib/crawl.js';
+import { EMAIL_RE, generateId } from '../../../_lib/constants.js';
 import * as paypal from '../../../_lib/paypal.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-export const onRequestOptions = ({ request, env }) =>
-  new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 'POST, OPTIONS');
 
 export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   let body;
@@ -77,7 +69,7 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
     : Math.floor(Date.now() / 1000) + 30 * 86400;
 
   const now = Math.floor(Date.now() / 1000);
-  const siteId = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  const siteId = generateId();
   const nextScanAt = now + Math.floor(Math.random() * 86400);
 
   // INSERT OR REPLACE: handles both first-time activation and re-subscription after cancellation.

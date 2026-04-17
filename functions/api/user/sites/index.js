@@ -5,19 +5,12 @@
  */
 import { requireAuth, json } from '../../../_lib/auth.js';
 import { normalizeUrl, getBaseDomain } from '../../../_lib/crawl.js';
-import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { corsOptions } from '../../../_lib/response.js';
+import { EMAIL_RE, generateId } from '../../../_lib/constants.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MAX_SITES_PER_USER = 20;
 
-export const onRequestOptions = ({ request, env }) =>
-  new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 'GET, POST, OPTIONS');
 
 export const onRequestGet = requireAuth(async ({ env, data }) => {
   const result = await env.DB.prepare(
@@ -88,7 +81,7 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   if (!normalizedStart) return json({ error: 'Could not normalize URL' }, 400);
 
   const baseDomain = getBaseDomain(normalizedStart);
-  const id = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  const id = generateId();
   const now = Math.floor(Date.now() / 1000);
   // Random spread within next 24 hours for first scan — prevents all new sites scanning simultaneously
   const nextScanAt = now + Math.floor(Math.random() * 86400);

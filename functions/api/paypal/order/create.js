@@ -14,22 +14,15 @@
  *  - Rate-limits to 3 uncaptured orders per hour to prevent table flooding
  */
 import { requireAuth, json } from '../../../_lib/auth.js';
-import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { corsOptions } from '../../../_lib/response.js';
 import { normalizeUrl } from '../../../_lib/crawl.js';
+import { EMAIL_RE } from '../../../_lib/constants.js';
 import * as paypal from '../../../_lib/paypal.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PRICE_PER_SITE = 9.00;
 const DAYS_IN_CYCLE  = 30;
 
-export const onRequestOptions = ({ request, env }) =>
-  new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 'POST, OPTIONS');
 
 export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   let body;

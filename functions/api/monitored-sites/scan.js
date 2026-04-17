@@ -15,27 +15,13 @@
 import { normalizeUrl, getBaseDomain } from '../../_lib/crawl.js';
 import { adminAuthCheck } from '../../_lib/monitor-auth.js';
 import { bootstrapScan } from '../../_lib/scan-bootstrap.js';
-import { getAllowedOrigin } from '../../_lib/cors.js';
+import { corsJson, corsOptions } from '../../_lib/response.js';
+import { generateId } from '../../_lib/constants.js';
 
-function json(request, env, data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
-}
+const json = corsJson;
 
 export function onRequestOptions({ request, env }) {
-  return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+  return corsOptions(request, env, 'POST, OPTIONS');
 }
 
 export async function onRequestPost({ request, env }) {
@@ -73,7 +59,7 @@ export async function onRequestPost({ request, env }) {
     return json(request, env, { error: 'Scan already in progress', scanId: site.pending_scan_id }, 409);
   }
 
-  const scanId = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  const scanId = generateId();
   const now = Math.floor(Date.now() / 1000);
 
   // Pre-insert scan stub so the FK on monitored_sites.pending_scan_id is satisfied

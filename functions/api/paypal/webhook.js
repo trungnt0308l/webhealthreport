@@ -79,7 +79,9 @@ export async function onRequestPost(ctx) {
           const sub = await paypal.getSubscription(env, subId);
           const nbStr = sub.billing_info?.next_billing_time;
           if (nbStr) nextBillingDate = Math.floor(new Date(nbStr).getTime() / 1000);
-        } catch {}
+        } catch (err) {
+          console.error('PayPal webhook: subscription lookup failed', err);
+        }
 
         await env.DB.prepare(
           `UPDATE user_subscriptions

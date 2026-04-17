@@ -4,7 +4,7 @@
 
 // Status codes commonly returned by bot-detection systems on otherwise-working sites.
 // Treat these as "likely reachable" rather than broken.
-const BOT_BLOCKED_STATUSES = new Set([403, 426, 429, 526, 530, 999]);
+export const BOT_BLOCKED_STATUSES = new Set([403, 426, 429, 526, 530, 999]);
 
 function pushTo(map, key, val) {
   if (!map.has(key)) map.set(key, []);

@@ -6,27 +6,12 @@
  */
 import { doFetch, checkUrl } from '../../_lib/checker.js';
 import { adminAuthCheck } from '../../_lib/monitor-auth.js';
-import { getAllowedOrigin } from '../../_lib/cors.js';
+import { corsJson, corsOptions } from '../../_lib/response.js';
 
-function json(request, env, data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
-}
+const json = corsJson;
 
 export function onRequestOptions({ request, env }) {
-  return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+  return corsOptions(request, env, 'POST, OPTIONS');
 }
 
 export async function onRequestPost({ request, env }) {
