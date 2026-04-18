@@ -109,9 +109,11 @@ export async function processBatch(env, scanId, siteId = null) {
 
   const LIMITS = scan.site_id ? PREMIUM_LIMITS : FREE_LIMITS;
 
-  // Reset stale 'processing' items (> 10 min) — handles scheduler Worker restarts
+  // Reset stale 'processing' items — handles Worker crashes/restarts.
+  // Increments retry_count so items abandoned mid-flight count against the retry budget
+  // and are eventually marked done rather than looping forever.
   await env.DB.prepare(
-    `UPDATE crawl_queue SET status = 'pending', claimed_at = NULL
+    `UPDATE crawl_queue SET status = 'pending', claimed_at = NULL, retry_count = retry_count + 1
      WHERE scan_id = ? AND status = 'processing' AND claimed_at IS NOT NULL AND claimed_at < unixepoch() - 120`
   ).bind(scanId).run();
 
@@ -145,7 +147,7 @@ export async function processBatch(env, scanId, siteId = null) {
          ORDER BY depth, id
          LIMIT ?
        )
-       RETURNING id, url, normalized_url, url_type, source_url, depth, anchor_text`
+       RETURNING id, url, normalized_url, url_type, source_url, depth, anchor_text, retry_count`
     ).bind(scanId, HEAD_BATCH_SIZE).all(),
   ]);
 
@@ -189,6 +191,8 @@ export async function processBatch(env, scanId, siteId = null) {
         visibleTextLength = parsed.visibleTextLength;
         links = parsed.links;
         images = parsed.images;
+      } else {
+        response.body?.cancel();
       }
 
       return { ok: true, statusCode, contentType, title, visibleTextLength, responseMs, finalUrl, redirectCount: redirectCount || 0, links, images, item };

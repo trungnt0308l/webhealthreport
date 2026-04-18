@@ -71,9 +71,9 @@ export async function onRequestPost({ request, env }) {
   // Per-domain cooldown — prevents repeated scans of the same site
   const recent = await env.DB.prepare(
     `SELECT id FROM scans WHERE base_domain = ? AND started_at > ? AND status != 'failed' LIMIT 1`
-  ).bind(baseDomain, Math.floor(Date.now() / 1000) - 600).first();
+  ).bind(baseDomain, Math.floor(Date.now() / 1000) - 60).first();
   if (recent) {
-    return corsJson(request, env, { error: 'A scan for this domain was recently started. Please wait 10 minutes.' }, 429);
+    return corsJson(request, env, { error: 'A scan for this domain was recently started. Please wait 1 minute.' }, 429);
   }
 
   const scanId = generateId();

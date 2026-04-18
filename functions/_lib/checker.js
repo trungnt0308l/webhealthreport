@@ -8,6 +8,9 @@
 
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_REDIRECTS = 15;
+// Hard cap on total checkUrl wall-clock time — must stay well below the 120s stale-reset
+// threshold in scan-engine, otherwise slow redirect chains cause the race that inflates retry_count.
+const CHECKURL_TIMEOUT_MS = 15_000;
 
 // Full browser header set — sending only User-Agent triggers bot detection on
 // many WAFs (Cloudflare, Akamai, DataDome). These headers match Chrome 146 on Windows.
@@ -49,6 +52,7 @@ export async function doFetch(url, method) {
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location');
+        response.body?.cancel();
         if (!location) {
           return { status: response.status, finalUrl: currentUrl, redirectCount, responseMs: Date.now() - start, error: null };
         }
@@ -57,6 +61,7 @@ export async function doFetch(url, method) {
         continue;
       }
 
+      response.body?.cancel();
       return { status: response.status, finalUrl: currentUrl, redirectCount, responseMs: Date.now() - start, error: null };
     } catch {
       clearTimeout(timer);
@@ -72,7 +77,7 @@ export async function doFetch(url, method) {
  * Some servers (SPAs, embedded content) return 404 to HEAD but 200 to GET.
  * Returns redirectCount from the HEAD check (representative of the chain length).
  */
-export async function checkUrl(url) {
+async function _checkUrl(url) {
   const result = await doFetch(url, 'HEAD');
   if (result.status !== null && result.status >= 400) {
     const getResult = await doFetch(url, 'GET');
@@ -80,6 +85,18 @@ export async function checkUrl(url) {
     return { ...getResult, redirectCount: Math.max(result.redirectCount, getResult.redirectCount) };
   }
   return result;
+}
+
+export function checkUrl(url) {
+  return Promise.race([
+    _checkUrl(url),
+    new Promise(resolve =>
+      setTimeout(
+        () => resolve({ status: null, finalUrl: url, redirectCount: 0, responseMs: CHECKURL_TIMEOUT_MS, error: 'timeout' }),
+        CHECKURL_TIMEOUT_MS
+      )
+    ),
+  ]);
 }
 
 /**
