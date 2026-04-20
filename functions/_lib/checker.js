@@ -6,11 +6,11 @@
  * - Short timeout per hop
  */
 
-const FETCH_TIMEOUT_MS = 8000;
+const FETCH_TIMEOUT_MS = 5000;
 const MAX_REDIRECTS = 15;
-// Hard cap on total checkUrl wall-clock time — must stay well below the 120s stale-reset
-// threshold in scan-engine, otherwise slow redirect chains cause the race that inflates retry_count.
-const CHECKURL_TIMEOUT_MS = 15_000;
+// Hard cap on total checkUrl wall-clock time (HEAD + GET fallback = 2×5 s = 10 s max).
+// Must stay well below the 120s stale-reset threshold — current margin is 12×.
+const CHECKURL_TIMEOUT_MS = 10_000;
 
 // Full browser header set — sending only User-Agent triggers bot detection on
 // many WAFs (Cloudflare, Akamai, DataDome). These headers match Chrome 146 on Windows.
@@ -33,7 +33,10 @@ const BROWSER_HEADERS = {
  * Fetch a URL with manual redirect following so we can count hops.
  * Returns { status, finalUrl, redirectCount, responseMs, error }.
  */
-export async function doFetch(url, method) {
+export async function doFetch(url, method, { referer } = {}) {
+  const headers = referer
+    ? { ...BROWSER_HEADERS, 'Referer': referer, 'sec-fetch-site': 'same-origin' }
+    : BROWSER_HEADERS;
   const start = Date.now();
   let currentUrl = url;
   let redirectCount = 0;
@@ -46,7 +49,7 @@ export async function doFetch(url, method) {
         method,
         redirect: 'manual',
         signal: controller.signal,
-        headers: BROWSER_HEADERS,
+        headers,
       });
       clearTimeout(timer);
 
@@ -77,19 +80,18 @@ export async function doFetch(url, method) {
  * Some servers (SPAs, embedded content) return 404 to HEAD but 200 to GET.
  * Returns redirectCount from the HEAD check (representative of the chain length).
  */
-async function _checkUrl(url) {
-  const result = await doFetch(url, 'HEAD');
+async function _checkUrl(url, { referer } = {}) {
+  const result = await doFetch(url, 'HEAD', { referer });
   if (result.status !== null && result.status >= 400) {
-    const getResult = await doFetch(url, 'GET');
-    // Preserve the redirect count from whichever gave the longer chain
+    const getResult = await doFetch(url, 'GET', { referer });
     return { ...getResult, redirectCount: Math.max(result.redirectCount, getResult.redirectCount) };
   }
   return result;
 }
 
-export function checkUrl(url) {
+export function checkUrl(url, { referer } = {}) {
   return Promise.race([
-    _checkUrl(url),
+    _checkUrl(url, { referer }),
     new Promise(resolve =>
       setTimeout(
         () => resolve({ status: null, finalUrl: url, redirectCount: 0, responseMs: CHECKURL_TIMEOUT_MS, error: 'timeout' }),
@@ -105,7 +107,10 @@ export function checkUrl(url) {
  * redirect count via a secondary HEAD if the URL changed.
  * Returns { response, responseMs, finalUrl, redirectCount }.
  */
-export async function fetchPage(url) {
+export async function fetchPage(url, { referer } = {}) {
+  const headers = referer
+    ? { ...BROWSER_HEADERS, 'Referer': referer, 'sec-fetch-site': 'same-origin' }
+    : BROWSER_HEADERS;
   const start = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -114,7 +119,7 @@ export async function fetchPage(url) {
       method: 'GET',
       redirect: 'follow',
       signal: controller.signal,
-      headers: BROWSER_HEADERS,
+      headers,
     });
     clearTimeout(timer);
     const finalUrl = response.url || url;
@@ -122,7 +127,7 @@ export async function fetchPage(url) {
     // Count redirects only when the URL actually changed (no extra request for non-redirecting pages)
     let redirectCount = 0;
     if (finalUrl !== url) {
-      const probe = await doFetch(url, 'HEAD');
+      const probe = await doFetch(url, 'HEAD', { referer });
       redirectCount = probe.redirectCount ?? 1;
     }
 

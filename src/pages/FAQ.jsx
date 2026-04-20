@@ -12,7 +12,7 @@ const FAQS = [
       },
       {
         question: 'How many pages will it scan?',
-        answer: 'Free one-off scans check up to 500 pages and 5,000 links. Monitored scans (with a free account) check up to 1,000 pages and 10,000 links. For most small and medium-sized websites either limit covers the entire site. If your site is larger, the scanner works through it systematically until the cap is reached.',
+        answer: 'Free one-off scans check up to 1,000 pages and 5,000 links. Monitored scans (with a free account) check up to 2,000 pages and 10,000 links. For most small and medium-sized websites either limit covers the entire site. If your site is larger, the scanner works through it systematically until the cap is reached.',
       },
       {
         question: 'Does it scan JavaScript-rendered content?',
@@ -24,7 +24,7 @@ const FAQS = [
       },
       {
         question: 'Is it really free?',
-        answer: 'One-off scans are completely free with no account required — just paste your URL and go. Scans check up to 500 pages and 5,000 links. Weekly automated monitoring is a paid feature at $9/month per site (currently discounted from $19/month).',
+        answer: 'One-off scans are completely free with no account required — just paste your URL and go. Scans check up to 1,000 pages and 5,000 links. Weekly automated monitoring is a paid feature at $9/month per site (currently discounted from $19/month).',
       },
     ],
   },
@@ -54,7 +54,7 @@ const FAQS = [
     items: [
       {
         question: 'What is weekly monitoring?',
-        answer: 'Weekly monitoring automatically scans your site once a week and emails you a health report whenever new issues are detected. Monitored scans check up to 1,000 pages and 10,000 links — twice the one-off scan limit. It is the easiest way to catch broken links introduced by content updates, third-party site changes, or server migrations before your visitors or Google notices them.',
+        answer: 'Weekly monitoring automatically scans your site once a week and emails you a health report whenever new issues are detected. Monitored scans check up to 2,000 pages and 10,000 links — twice the one-off scan limit. It is the easiest way to catch broken links introduced by content updates, third-party site changes, or server migrations before your visitors or Google notices them.',
       },
       {
         question: 'How do I set up scheduled scans?',
@@ -178,7 +178,7 @@ export default function FAQ() {
       </main>
 
       <footer className="text-center text-xs text-slate-400 py-6 border-t border-slate-100">
-        Website Health Report — checks up to 1,000 pages per scan
+        Website Health Report — checks up to 2,000 pages per scan
       </footer>
     </div>
   );

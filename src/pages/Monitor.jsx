@@ -162,6 +162,16 @@ function UrlChecker({ monitorKey }) {
           </table>
         </div>
       )}
+      {result?.diagnostic && (
+        <details className="mt-3">
+          <summary className="text-xs text-slate-500 cursor-pointer select-none hover:text-slate-700">
+            Diagnostic (stripped headers, response headers + body snippet)
+          </summary>
+          <pre className="mt-2 text-[11px] bg-slate-900 text-slate-100 rounded p-3 overflow-x-auto whitespace-pre-wrap break-all">
+            {JSON.stringify(result.diagnostic, null, 2)}
+          </pre>
+        </details>
+      )}
     </div>
   );
 }

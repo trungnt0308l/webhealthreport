@@ -110,9 +110,9 @@ async function runScan(env, msg) {
   }
 
   // Loop up to MAX_LOOPS processBatch calls per invocation.
-  // Hard cap keeps worst-case subrequests under 1,000 (4 × ~200).
+  // Hard cap keeps worst-case subrequests under 1,000 (8 × ~120 = ~960).
   // Wall-clock deadline is a secondary guard for slow/redirect-heavy sites.
-  const MAX_LOOPS   = 6;
+  const MAX_LOOPS   = 8;
   const WALL_BUDGET = 28_000; // ms
   const deadline    = Date.now() + WALL_BUDGET;
 

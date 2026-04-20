@@ -40,17 +40,49 @@ export async function onRequestPost({ request, env }) {
     return json(request, env, { error: 'Only http/https URLs are supported' }, 400);
   }
 
+  const referer = parsed.origin + '/';
   // Run HEAD and GET independently, then checkUrl (which does HEAD→GET fallback internally)
   const [headResult, getResult, checkUrlResult] = await Promise.all([
-    doFetch(url, 'HEAD'),
-    doFetch(url, 'GET'),
-    checkUrl(url),
+    doFetch(url, 'HEAD', { referer }),
+    doFetch(url, 'GET', { referer }),
+    checkUrl(url, { referer }),
   ]);
+
+  // Capture raw response headers and body snippet for WAF diagnosis.
+  // Uses a stripped-down header set (no sec-fetch-*) to test whether those headers are triggering the block.
+  let diagnostic = null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    const diagResponse = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': referer,
+      },
+    });
+    clearTimeout(timer);
+    const responseHeaders = Object.fromEntries(diagResponse.headers.entries());
+    const bodyText = await diagResponse.text().catch(() => '');
+    diagnostic = {
+      status: diagResponse.status,
+      headers: responseHeaders,
+      bodySnippet: bodyText.slice(0, 500),
+    };
+  } catch (e) {
+    diagnostic = { error: String(e) };
+  }
 
   return json(request, env, {
     url,
     head: headResult,
     get: getResult,
     checkUrl: checkUrlResult,
+    diagnostic,
   });
 }

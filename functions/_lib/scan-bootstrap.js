@@ -42,7 +42,8 @@ export async function bootstrapScan(env, scanId, rawUrl, baseDomain, siteId = nu
 
   let homepageOk = true;
   try {
-    const { response, responseMs, finalUrl, redirectCount } = await fetchPage(normalizedStart);
+    const referer = new URL(normalizedStart).origin + '/';
+    const { response, responseMs, finalUrl, redirectCount } = await fetchPage(normalizedStart, { referer });
     const contentType = response.headers.get('content-type') || '';
     const statusCode = response.status;
     let title = '';

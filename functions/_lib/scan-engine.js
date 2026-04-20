@@ -8,13 +8,13 @@ import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInt
 import { checkBatch, fetchPage } from './checker.js';
 import { detectIssues, BOT_BLOCKED_STATUSES } from './issues.js';
 
-const HTML_BATCH_SIZE = 10;
+const HTML_BATCH_SIZE = 15;
 const HEAD_BATCH_SIZE = 80;
 const MAX_DEPTH = 5;
 const D1_CHUNK = 100;
 
-const FREE_LIMITS    = { maxPages: 750,  maxLinks: 7500,  maxLinksPerPage: 250, maxImagesPerPage: 250 };
-const PREMIUM_LIMITS = { maxPages: 1500, maxLinks: 15000, maxLinksPerPage: 250, maxImagesPerPage: 250 };
+const FREE_LIMITS    = { maxPages: 1000,  maxLinks: 7500,  maxLinksPerPage: 250, maxImagesPerPage: 250 };
+const PREMIUM_LIMITS = { maxPages: 2000, maxLinks: 15000, maxLinksPerPage: 250, maxImagesPerPage: 250 };
 
 async function batchAll(env, stmts) {
   for (let i = 0; i < stmts.length; i += D1_CHUNK) {
@@ -177,7 +177,8 @@ export async function processBatch(env, scanId, siteId = null) {
   async function processHtmlItem(item) {
     const absUrl = item.normalized_url;
     try {
-      const { response, responseMs, finalUrl, redirectCount } = await fetchPage(absUrl);
+      const referer = new URL(scan.url).origin + '/';
+      const { response, responseMs, finalUrl, redirectCount } = await fetchPage(absUrl, { referer });
       const contentType = response.headers.get('content-type') || '';
       const statusCode = response.status;
       let title = '';
@@ -223,7 +224,7 @@ export async function processBatch(env, scanId, siteId = null) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(scanId, absUrl, absUrl, r.statusCode, r.contentType || '', r.title, r.visibleTextLength, r.responseMs, r.redirectCount, r.finalUrl || absUrl));
 
-    const isBroken = r.statusCode === null || r.statusCode >= 400;
+    const isBroken = r.statusCode === null || (r.statusCode >= 400 && !BOT_BLOCKED_STATUSES.has(r.statusCode));
     const isChain = r.redirectCount >= 5;
     if (isBroken || isChain) {
       linkCheckInserts.push(env.DB.prepare(

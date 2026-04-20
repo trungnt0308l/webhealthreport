@@ -66,7 +66,7 @@ export default function Home() {
 
   usePageMeta({
     title: 'Website Health Report — Free Website Scanner',
-    description: 'Scan your website for broken links, missing pages, and technical issues in minutes. Free, no account required. Checks up to 1,000 pages and 10,000 links.',
+    description: 'Scan your website for broken links, missing pages, and technical issues in minutes. Free, no account required. Checks up to 2,000 pages and 10,000 links.',
     path: '/',
   });
 
@@ -172,11 +172,11 @@ export default function Home() {
 
           {isAuthenticated ? (
             <p className="mt-4 text-xs text-slate-400">
-              One-off scan — up to <span className="font-medium text-slate-500">500 pages</span> and <span className="font-medium text-slate-500">5,000 links</span>. Your weekly monitored scans check up to 1,000 pages and 10,000 links.
+              One-off scan — up to <span className="font-medium text-slate-500">1,000 pages</span> and <span className="font-medium text-slate-500">5,000 links</span>. Your weekly monitored scans check up to 2,000 pages and 10,000 links.
             </p>
           ) : (
             <p className="mt-4 text-xs text-slate-400">
-              Free scan — no account required. Up to <span className="font-medium text-slate-500">500 pages</span> and <span className="font-medium text-slate-500">5,000 links</span>.{' '}
+              Free scan — no account required. Up to <span className="font-medium text-slate-500">1,000 pages</span> and <span className="font-medium text-slate-500">5,000 links</span>.{' '}
               <Link to="/register" className="text-brand-600 hover:underline">Create an account</Link> to add weekly monitoring from <span className="font-medium text-slate-500">$9/month</span>.
             </p>
           )}
@@ -273,7 +273,7 @@ export default function Home() {
                 <p className="text-sm text-slate-500 mt-1">No account required</p>
               </div>
               <ul className="space-y-2 text-sm text-slate-600 flex-1">
-                {['Up to 500 pages per scan', 'Up to 5,000 links checked', 'Full issue report with health score', 'Instant results'].map(f => (
+                {['Up to 1,000 pages per scan', 'Up to 5,000 links checked', 'Full issue report with health score', 'Instant results'].map(f => (
                   <li key={f} className="flex items-start gap-2"><span className="text-green-500 font-bold mt-0.5">✓</span>{f}</li>
                 ))}
               </ul>
@@ -303,7 +303,7 @@ export default function Home() {
               <ul className="space-y-2 text-sm text-slate-600 flex-1">
                 {[
                   'Per site, billed monthly',
-                  'Up to 1,000 pages per scan',
+                  'Up to 2,000 pages per scan',
                   'Up to 10,000 links checked',
                   'Weekly automated scans',
                   'Email alerts when issues appear',
@@ -323,10 +323,10 @@ export default function Home() {
           <p className="text-slate-500 text-center mb-8 text-sm">Quick answers — or see the full FAQ.</p>
           <div className="card">
             {[
-              { question: 'Is one-off scanning really free?', answer: 'Yes. One-off scans are completely free with no account required — just paste your URL and go. Scans check up to 500 pages and 5,000 links.' },
+              { question: 'Is one-off scanning really free?', answer: 'Yes. One-off scans are completely free with no account required — just paste your URL and go. Scans check up to 1,000 pages and 5,000 links.' },
               { question: 'How much does weekly monitoring cost?', answer: 'Weekly monitoring is $9/month per site — currently discounted from $19/month. You are only charged for sites you actively monitor, and you can cancel at any time from your account page.' },
               { question: 'How long does a scan take?', answer: 'Most sites complete in 30 seconds to 2 minutes. Larger sites with hundreds of pages may take a little longer, but you can watch the progress live.' },
-              { question: 'What is weekly monitoring?', answer: 'Weekly monitoring automatically scans your site once a week and emails you a report when new issues are found. Monitored scans check up to 1,000 pages and 10,000 links — twice the free scan limit.' },
+              { question: 'What is weekly monitoring?', answer: 'Weekly monitoring automatically scans your site once a week and emails you a report when new issues are found. Monitored scans check up to 2,000 pages and 10,000 links — twice the free scan limit.' },
             ].map(faq => (
               <FAQAccordionItem key={faq.question} question={faq.question} answer={faq.answer} />
             ))}
@@ -338,7 +338,7 @@ export default function Home() {
       </main>
 
       <footer className="text-center text-xs text-slate-400 py-6 border-t border-slate-100">
-        Website Health Report — checks up to 1,000 pages per scan &nbsp;·&nbsp;
+        Website Health Report — checks up to 2,000 pages per scan &nbsp;·&nbsp;
         <Link to="/faq" className="hover:text-slate-600 underline">FAQ</Link>
       </footer>
     </div>
