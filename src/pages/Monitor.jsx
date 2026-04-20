@@ -108,9 +108,10 @@ function UrlChecker({ monitorKey }) {
   }
 
   const rows = result ? [
-    { label: 'HEAD', data: result.head },
-    { label: 'GET', data: result.get },
-    { label: 'checkUrl', data: result.checkUrl, highlight: true },
+    { label: 'HEAD', data: result.head, note: `Referer: ${new URL(result.url).origin}/` },
+    { label: 'GET', data: result.get, note: `Referer: ${new URL(result.url).origin}/` },
+    { label: 'checkUrl', data: result.checkUrl, highlight: true, note: 'with Referer (scan uses source page URL)' },
+    ...(result.checkUrlNoReferer ? [{ label: 'checkUrl', data: result.checkUrlNoReferer, note: 'no Referer' }] : []),
   ] : [];
 
   return (
@@ -145,11 +146,11 @@ function UrlChecker({ monitorKey }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ label, data, highlight }) => (
-                <tr key={label} className={`border-t border-slate-100 ${highlight ? 'bg-slate-50 font-semibold' : ''}`}>
+              {rows.map(({ label, data, highlight, note }, i) => (
+                <tr key={i} className={`border-t border-slate-100 ${highlight ? 'bg-slate-50 font-semibold' : ''}`}>
                   <td className="px-3 py-2 font-mono text-slate-700">
                     {label}
-                    {highlight && <span className="ml-2 text-[10px] text-slate-400 font-normal">(recorded)</span>}
+                    {note && <span className="ml-2 text-[10px] text-slate-400 font-normal">({note})</span>}
                   </td>
                   <td className="px-3 py-2"><StatusBadge status={data.status} /></td>
                   <td className="px-3 py-2 font-mono text-slate-600 max-w-[300px] truncate" title={data.finalUrl}>{data.finalUrl}</td>

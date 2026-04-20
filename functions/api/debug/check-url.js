@@ -41,11 +41,13 @@ export async function onRequestPost({ request, env }) {
   }
 
   const referer = parsed.origin + '/';
-  // Run HEAD and GET independently, then checkUrl (which does HEAD→GET fallback internally)
-  const [headResult, getResult, checkUrlResult] = await Promise.all([
+  // Run HEAD and GET independently, then checkUrl (which does HEAD→GET fallback internally).
+  // Also run checkUrl without Referer to show what the scan sees for URLs not linked from a page.
+  const [headResult, getResult, checkUrlResult, checkUrlNoReferer] = await Promise.all([
     doFetch(url, 'HEAD', { referer }),
     doFetch(url, 'GET', { referer }),
     checkUrl(url, { referer }),
+    checkUrl(url),
   ]);
 
   // Capture raw response headers and body snippet for WAF diagnosis.
@@ -83,6 +85,7 @@ export async function onRequestPost({ request, env }) {
     head: headResult,
     get: getResult,
     checkUrl: checkUrlResult,
+    checkUrlNoReferer,
     diagnostic,
   });
 }

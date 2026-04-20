@@ -6,10 +6,10 @@
  * - Short timeout per hop
  */
 
-const FETCH_TIMEOUT_MS = 5000;
+const FETCH_TIMEOUT_MS = 8000;
 const MAX_REDIRECTS = 15;
-// Hard cap on total checkUrl wall-clock time (HEAD + GET fallback = 2×5 s = 10 s max).
-// Must stay well below the 120s stale-reset threshold — current margin is 12×.
+// Hard cap on total checkUrl wall-clock time. HEAD + GET fallback = up to 16 s raw,
+// but the outer 10 s cap abandons slow HEAD→GET paths early. Well below the 120s stale-reset threshold.
 const CHECKURL_TIMEOUT_MS = 10_000;
 
 // Full browser header set — sending only User-Agent triggers bot detection on
@@ -144,7 +144,7 @@ export async function fetchPage(url, { referer } = {}) {
 export async function checkBatch(items) {
   return Promise.all(
     items.map(item =>
-      checkUrl(item.url)
+      checkUrl(item.url, item.source_url ? { referer: item.source_url } : {})
         .then(r => ({ ...item, ...r }))
         .catch(() => ({ ...item, status: null, error: 'error', responseMs: 0, finalUrl: item.url, redirectCount: 0 }))
     )
