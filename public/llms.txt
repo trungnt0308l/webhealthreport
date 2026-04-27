@@ -1,0 +1,45 @@
+# Website Health Report
+
+> Free website scanner that detects broken links, missing pages, and technical issues in minutes.
+
+Website Health Report crawls any public website and produces a prioritised health report. It
+detects eight categories of issues — broken internal links, broken external links, broken images,
+redirect chains, missing page titles, thin pages, slow pages, and homepage availability — ranking
+each by severity (critical, important, minor) and linking it back to the page where it was found.
+
+One-off scans are completely free, require no account, and check up to 1,000 pages and 5,000 links.
+Weekly automated monitoring costs $9/month per site (currently discounted from $19/month) and scans
+up to 2,000 pages and 10,000 links.
+
+## Key pages
+
+- [Home / Scanner](https://webhealthreport.pages.dev/): Enter any URL to start a free scan
+- [FAQ](https://webhealthreport.pages.dev/faq): Detailed answers about the scanner, issue types, monitoring, and pricing
+
+## What it checks
+
+| Issue | Severity | What it means |
+|---|---|---|
+| Broken internal links | Critical | Links within your site returning 4xx/5xx errors |
+| Broken external links | Important | Outbound links to pages that no longer exist |
+| Broken images | Important | Images that fail to load |
+| Redirect chains | Minor | URLs that redirect through two or more hops |
+| Missing page titles | Important | Pages with a blank or absent <title> tag |
+| Thin pages | Minor | Pages with fewer than ~100 words of body text |
+| Slow pages | Minor | Pages taking over 3 seconds to respond |
+| Homepage unavailable | Critical | Root URL is unreachable or returns an error |
+
+## Pricing
+
+| Plan | Price | Pages | Links |
+|---|---|---|---|
+| One-off scan | Free | 1,000 | 5,000 |
+| Weekly monitoring | $9/month per site | 2,000 | 10,000 |
+
+## Technical notes
+
+- Scans fetch raw HTML (same as Googlebot's first crawl pass) — no JavaScript rendering
+- Most sites complete in 30 seconds to 2 minutes
+- Health score 0–100: A (90–100), B (75–89), C (60–74), D (40–59), F (<40)
+- Results can be exported as CSV
+- No public API — scanning is initiated via the web UI only

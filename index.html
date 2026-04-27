@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
 
     <!-- Primary meta -->
     <title>Website Health Report — Free Website Scanner</title>
@@ -15,11 +16,15 @@
     <meta property="og:title" content="Website Health Report — Free Website Scanner" />
     <meta property="og:description" content="Scan your website for broken links, missing pages, and technical issues in minutes. Free, no account required." />
     <meta property="og:site_name" content="Website Health Report" />
+    <meta property="og:image" content="https://webhealthreport.pages.dev/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Website Health Report — Free Website Scanner" />
     <meta name="twitter:description" content="Scan your website for broken links, missing pages, and technical issues in minutes. Free, no account required." />
+    <meta name="twitter:image" content="https://webhealthreport.pages.dev/og-image.png" />
 
     <!-- Structured data -->
     <script type="application/ld+json">
@@ -39,6 +44,41 @@
           "name": "Website Health Report",
           "description": "Free website scanner for broken links, missing pages, and technical issues",
           "publisher": { "@id": "https://webhealthreport.pages.dev/#organization" }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://webhealthreport.pages.dev/#app",
+          "name": "Website Health Report",
+          "applicationCategory": "WebApplication",
+          "operatingSystem": "Web",
+          "url": "https://webhealthreport.pages.dev/",
+          "description": "Free website scanner that checks for broken links, missing pages, and technical issues. Checks up to 1,000 pages and 5,000 links instantly. Weekly monitoring available for $9/month.",
+          "featureList": [
+            "Broken internal link detection",
+            "Broken external link detection",
+            "Broken image detection",
+            "Redirect chain detection",
+            "Missing page title detection",
+            "Thin page detection",
+            "Slow page detection",
+            "Homepage availability check"
+          ],
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Free one-off scan",
+              "price": "0",
+              "priceCurrency": "USD",
+              "description": "Scan up to 1,000 pages and 5,000 links with no account required"
+            },
+            {
+              "@type": "Offer",
+              "name": "Weekly monitoring",
+              "price": "9.00",
+              "priceCurrency": "USD",
+              "description": "Automated weekly scans up to 2,000 pages and 10,000 links with email alerts"
+            }
+          ]
         }
       ]
     }

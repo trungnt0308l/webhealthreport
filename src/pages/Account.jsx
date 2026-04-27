@@ -9,7 +9,7 @@ import { formatDate, formatDateShort } from '../lib/format.js';
 import EmailEditCell from '../components/EmailEditCell.jsx';
 
 const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID
-  || 'ARBvCNAx34VDcfk1QTFnpg6Bl19KSGv-TfJkqNxIZPH2k4i6M5ueZKdMPIBzL19dO5ZHWqZMd7EO8WQY';
+  || 'Adn56CInI4h1VVb1zz7Fx_s20NqXytt7R570bKxAifqItorlXGYC-cZeZXm-GzRDJ1qpt8L9nVSdw7RL';
 
 // Dynamically load the PayPal JS SDK for subscriptions
 function loadPayPalSDK() {

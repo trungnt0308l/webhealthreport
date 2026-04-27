@@ -216,6 +216,19 @@ export async function captureProRateOrder(token, orderId) {
   return res.json();
 }
 
+export async function emailReport(scanId, email) {
+  const res = await fetch(`${BASE}/scans/${scanId}/email-report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to send report');
+  }
+  return res.json();
+}
+
 export async function addSuppression(token, siteId, issueType, targetUrl) {
   const res = await fetch(`${BASE}/user/sites/${siteId}/suppressions`, {
     method: 'POST',

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
-import { getScanReport, addSuppression } from '../lib/api.js';
-import { scoreColor, scoreBgColor, severityBadgeClass, gradeDescription, shortUrl } from '../lib/format.js';
+import { getScanReport, addSuppression, emailReport } from '../lib/api.js';
+import { scoreColor, scoreBgColor, severityBadgeClass, gradeDescription, shortUrl, downloadCsv } from '../lib/format.js';
 
 function decodeEntities(str) {
   if (!str || !str.includes('&')) return str;
@@ -50,19 +50,35 @@ function FoundOnCell({ sourceUrl, title }) {
   );
 }
 
-function PagesTable({ pages }) {
+function PagesTable({ pages, report }) {
   const [open, setOpen] = useState(false);
+
+  function exportPagesCsv() {
+    const headers = ['URL', 'HTTP Status', 'Title', 'Response Time (ms)'];
+    const rows = pages.map(p => [p.url, p.statusCode ?? '', p.title ?? '', p.responseMs ?? '']);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(`${report.baseDomain}-pages-${date}.csv`, headers, rows);
+  }
+
   return (
     <div className="mb-8">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="flex items-center justify-between w-full text-left mb-3"
-      >
-        <h3 className="font-semibold text-slate-800">
-          Pages crawled <span className="text-slate-400 font-normal">({pages.length})</span>
-        </h3>
-        <span className="text-slate-400 text-sm">{open ? '▲' : '▼'}</span>
-      </button>
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-2 text-left"
+        >
+          <h3 className="font-semibold text-slate-800">
+            Pages crawled <span className="text-slate-400 font-normal">({pages.length})</span>
+          </h3>
+          <span className="text-slate-400 text-sm">{open ? '▲' : '▼'}</span>
+        </button>
+        <button
+          onClick={exportPagesCsv}
+          className="text-xs text-slate-500 hover:text-brand-600 border border-slate-200 rounded px-3 py-1.5 transition-colors"
+        >
+          Export CSV ↓
+        </button>
+      </div>
       {open && (
         <div className="card p-0 overflow-hidden">
           <table className="w-full text-xs">
@@ -103,7 +119,7 @@ function CopyCell({ urlKey, url, maxLen = 60, copiedId, onCopy }) {
   );
 }
 
-function IssueTable({ issues: initialIssues, pages, siteId, token }) {
+function IssueTable({ issues: initialIssues, pages, siteId, token, report }) {
   const [issues, setIssues] = useState(initialIssues);
   const [copiedId, setCopiedId] = useState(null);
   const [suppressingId, setSuppressingId] = useState(null);
@@ -134,6 +150,30 @@ function IssueTable({ issues: initialIssues, pages, siteId, token }) {
     }
   }
 
+  function exportIssuesCsv() {
+    const headers = [
+      'Severity', 'Issue Type', 'Affected URL', 'Anchor Text',
+      'Found On (1)', 'Found On (2)', 'Found On (3)',
+      'HTTP Status', 'Recommended Action', 'Explanation', 'First Detected',
+    ];
+    const rows = issues.map(issue => {
+      const src = issue.example?.sources ?? [];
+      return [
+        issue.severity,
+        ISSUE_LABELS[issue.type] || issue.type,
+        issue.example?.target || issue.example?.url || '',
+        issue.example?.anchorText || '',
+        src[0] || '', src[1] || '', src[2] || '',
+        issue.example?.status || '',
+        issue.recommendedAction || '',
+        issue.explanation || '',
+        issue.firstDetectedAt ? new Date(issue.firstDetectedAt * 1000).toLocaleDateString() : '',
+      ];
+    });
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(`${report.baseDomain}-issues-${date}.csv`, headers, rows);
+  }
+
   const showSuppressCol = siteId !== undefined; // show column for any monitored-site report
   const canSuppress = siteId && token;
 
@@ -147,7 +187,15 @@ function IssueTable({ issues: initialIssues, pages, siteId, token }) {
 
   return (
     <div className="mb-8">
-      <h2 className="text-lg font-bold text-slate-800 mb-4">Issues found</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-slate-800">Issues found</h2>
+        <button
+          onClick={exportIssuesCsv}
+          className="text-xs text-slate-500 hover:text-brand-600 border border-slate-200 rounded px-3 py-1.5 transition-colors"
+        >
+          Export CSV ↓
+        </button>
+      </div>
       {suppressError && (
         <div className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
           {suppressError}
@@ -269,6 +317,63 @@ function FixedIssuesSection({ fixedIssues }) {
   );
 }
 
+function EmailReportForm({ scanId, prefillEmail }) {
+  const [email, setEmail] = useState(prefillEmail || '');
+  const [status, setStatus] = useState('idle'); // idle | sending | sent | error
+  const [errorMsg, setErrorMsg] = useState('');
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setStatus('sending');
+    setErrorMsg('');
+    try {
+      await emailReport(scanId, email);
+      setStatus('sent');
+    } catch (err) {
+      setErrorMsg(err.message);
+      setStatus('error');
+    }
+  }
+
+  if (status === 'sent') {
+    return (
+      <div className="card bg-green-50 border-green-200 mb-8 flex items-center gap-3">
+        <span className="text-green-600 text-lg">✓</span>
+        <p className="text-sm text-green-800">
+          Report sent to <strong>{email}</strong>. Check your inbox.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card mb-8">
+      <p className="text-sm font-medium text-slate-700 mb-3">Email this report to yourself</p>
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="your@email.com"
+          required
+          disabled={status === 'sending'}
+          className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+        />
+        <button
+          type="submit"
+          disabled={status === 'sending' || !email}
+          className="btn-primary text-sm whitespace-nowrap"
+        >
+          {status === 'sending' ? 'Sending…' : 'Send report →'}
+        </button>
+      </form>
+      {status === 'error' && (
+        <p className="text-xs text-red-600 mt-2">{errorMsg}</p>
+      )}
+    </div>
+  );
+}
+
 function WeeklyMonitoringCta() {
   const { isAuthenticated, loginWithRedirect } = useAuth0();
   const navigate = useNavigate();
@@ -299,7 +404,7 @@ function WeeklyMonitoringCta() {
 
 export default function Report() {
   const { id } = useParams();
-  const { isAuthenticated, getAccessTokenSilently } = useAuth0();
+  const { isAuthenticated, getAccessTokenSilently, user } = useAuth0();
   const [report, setReport] = useState(null);
   const [error, setError] = useState('');
   const [token, setToken] = useState(null);
@@ -388,6 +493,9 @@ export default function Report() {
           </div>
         </div>
 
+        {/* Email capture */}
+        <EmailReportForm scanId={id} prefillEmail={user?.email} />
+
         {/* Weekly monitoring CTA — top */}
         {!isAuthenticated && (
           <div className="mb-8">
@@ -426,6 +534,7 @@ export default function Report() {
             pages={report.pages}
             siteId={report.siteId}
             token={token}
+            report={report}
           />
         )}
 
@@ -434,7 +543,7 @@ export default function Report() {
 
         {/* Pages crawled */}
         {report.pages && report.pages.length > 0 && (
-          <PagesTable pages={report.pages} />
+          <PagesTable pages={report.pages} report={report} />
         )}
 
         {/* Weekly monitoring CTA — bottom */}
