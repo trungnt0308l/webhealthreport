@@ -29,3 +29,18 @@
     @apply bg-slate-100 text-slate-600 text-xs font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide;
   }
 }
+
+/* Print layout for "Download PDF" on the report page */
+@media print {
+  body {
+    background: white;
+  }
+  .card {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+}

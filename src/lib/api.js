@@ -116,6 +116,15 @@ export async function updateUserSiteEmails(token, id, emails) {
   return res.json();
 }
 
+export async function getSiteHistory(token, id) {
+  const res = await fetch(`${BASE}/user/sites/${id}/history`, {
+    headers: bearerHeaders(token),
+  });
+  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
+  if (!res.ok) throw new Error('Failed to fetch history');
+  return res.json();
+}
+
 export async function removeUserSite(token, id) {
   const res = await fetch(`${BASE}/user/sites/${id}`, {
     method: 'DELETE',

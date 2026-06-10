@@ -48,6 +48,12 @@ Each issue includes:
 - Affected page count
 - Example source pages where the issue was found
 
+### Report Export & Sharing
+- **Export issues as CSV** — one click, opens in Excel/Google Sheets; ideal for ticketing systems and client handoffs
+- **Download as PDF** — print-optimised report layout via the browser's Save-as-PDF
+- **Shareable report link** — copy and send to your team or client, no login needed to view
+- **Embeddable health badge** — live SVG badge (`/api/badge/:scanId`) showing the site's grade and score; paste one line of HTML into your footer to display it
+
 ### Severity Tiers
 - **Critical** — fix immediately (homepage down, widely linked broken pages)
 - **Important** — fix soon (broken links, broken images, redirect chains)
@@ -65,6 +71,7 @@ Sign up for a free account (Google or email) to unlock automated monitoring:
 - **Email health reports** delivered to your inbox after every scan
 - Support for **multiple email recipients** per site — share reports with your team, client, or agency
 - Issue history tracking — see when each issue was first detected
+- **Health score trend** — sparkline chart per site on your dashboard, with full scan history (date, score, grade, issues) linking back to every past report
 - **Issue suppression** — hide false positives or known non-issues from your reports without affecting the score
 
 ---

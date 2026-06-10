@@ -1,12 +1,13 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, Fragment } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import {
-  getUserSites, removeUserSite, updateUserSiteEmails,
+  getUserSites, removeUserSite, updateUserSiteEmails, getSiteHistory,
   getSubscription, createPayPalSubscription, activateSubscription,
   cancelSubscription, createProRateOrder, captureProRateOrder,
 } from '../lib/api.js';
-import { formatDate, formatDateShort } from '../lib/format.js';
+import { formatDate, formatDateShort, scoreColor } from '../lib/format.js';
 import EmailEditCell from '../components/EmailEditCell.jsx';
+import ScoreSparkline from '../components/ScoreSparkline.jsx';
 
 const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID
   || 'ARBvCNAx34VDcfk1QTFnpg6Bl19KSGv-TfJkqNxIZPH2k4i6M5ueZKdMPIBzL19dO5ZHWqZMd7EO8WQY';
@@ -402,6 +403,47 @@ function AddSiteModal({ token, userEmail, onSuccess, onClose }) {
   );
 }
 
+// ── Score trend ────────────────────────────────────────────────────────────
+
+function TrendCell({ history, expanded, onToggle }) {
+  if (history === undefined) return <span className="text-slate-300 text-xs">…</span>;
+  if (!history.length) return <span className="text-slate-300 text-xs">—</span>;
+  const latest = history[history.length - 1];
+  return (
+    <button onClick={onToggle} className="flex items-center gap-2 group"
+      title={expanded ? 'Hide scan history' : 'Show scan history'}>
+      <ScoreSparkline scans={history} />
+      <span className={`text-sm font-bold ${scoreColor(latest.healthScore)}`}>{latest.healthScore}</span>
+      <span className="text-slate-300 text-xs group-hover:text-slate-500">{expanded ? '▲' : '▼'}</span>
+    </button>
+  );
+}
+
+function ScanHistoryRow({ history, colSpan }) {
+  const newestFirst = [...history].reverse();
+  return (
+    <tr className="border-t border-slate-100 bg-slate-50/70">
+      <td colSpan={colSpan} className="px-5 py-3">
+        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+          Scan history ({history.length})
+        </div>
+        <div className="grid gap-1">
+          {newestFirst.map(scan => (
+            <div key={scan.scanId} className="flex items-center gap-4 text-xs">
+              <span className="text-slate-500 w-32">{formatDateShort(scan.finishedAt)}</span>
+              <span className={`font-bold w-14 ${scoreColor(scan.healthScore)}`}>
+                {scan.grade} · {scan.healthScore}
+              </span>
+              <span className="text-slate-500 w-20">{scan.totalIssues} issue{scan.totalIssues !== 1 ? 's' : ''}</span>
+              <a href={`/report/${scan.scanId}`} className="text-brand-600 hover:underline">View report</a>
+            </div>
+          ))}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 // ── Sites section ─────────────────────────────────────────────────────────
 
 function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) {
@@ -410,6 +452,8 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
   const [showModal, setShowModal]       = useState(false);
   const [captureStatus, setCaptureStatus] = useState(null); // 'loading' | 'ok' | 'error'
   const [captureMsg, setCaptureMsg]     = useState('');
+  const [histories, setHistories]       = useState({}); // siteId -> array of past scans
+  const [expandedSiteId, setExpandedSiteId] = useState(null);
 
   const isSubscribed = subscription?.status === 'active';
 
@@ -423,6 +467,22 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
   }, [token]);
 
   useEffect(() => { loadSites(); }, [loadSites]);
+
+  // Load score history for each site (drives the trend sparklines)
+  useEffect(() => {
+    if (!sites.length) return;
+    let cancelled = false;
+    Promise.all(
+      sites.map(s =>
+        getSiteHistory(token, s.id)
+          .then(d => [s.id, d.scans || []])
+          .catch(() => [s.id, []])
+      )
+    ).then(entries => {
+      if (!cancelled) setHistories(Object.fromEntries(entries));
+    });
+    return () => { cancelled = true; };
+  }, [sites, token]);
 
   // Handle return from PayPal redirect (capture flow for subsequent sites)
   useEffect(() => {
@@ -548,6 +608,7 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
                   <th className="text-left px-5 py-2.5">Domain</th>
                   <th className="text-left px-5 py-2.5">Notification emails</th>
                   <th className="text-left px-5 py-2.5">Status</th>
+                  <th className="text-left px-5 py-2.5">Score trend</th>
                   <th className="text-left px-5 py-2.5">Last scan</th>
                   <th className="text-left px-5 py-2.5">Next scan</th>
                   <th className="px-5 py-2.5"></th>
@@ -556,8 +617,11 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
               <tbody>
                 {sites.map(site => {
                   const emails = JSON.parse(site.emails || '[]');
+                  const history = histories[site.id];
+                  const expanded = expandedSiteId === site.id;
                   return (
-                    <tr key={site.id} className={`border-t border-slate-100 hover:bg-slate-50 ${site.paused ? 'opacity-60' : ''}`}>
+                    <Fragment key={site.id}>
+                    <tr className={`border-t border-slate-100 hover:bg-slate-50 ${site.paused ? 'opacity-60' : ''}`}>
                       <td className="px-5 py-3 font-mono text-xs text-slate-700 max-w-[160px] truncate" title={site.url}>
                         {site.base_domain}
                         {site.paused ? <span className="ml-1 text-amber-600 font-sans font-medium not-italic">(paused)</span> : null}
@@ -576,6 +640,13 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
                                 ? <span className="text-red-500 text-xs font-medium" title={site.last_scan_error || ''}>Failed{site.last_scan_error ? ' ⓘ' : ''}</span>
                                 : <span className="text-slate-400 text-xs">Never run</span>}
                       </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <TrendCell
+                          history={history}
+                          expanded={expanded}
+                          onToggle={() => setExpandedSiteId(expanded ? null : site.id)}
+                        />
+                      </td>
                       <td className="px-5 py-3 whitespace-nowrap text-sm">
                         {site.last_scan_id
                           ? <a href={`/report/${site.last_scan_id}`} className="text-brand-600 hover:underline">{formatDate(site.last_scan_at)}</a>
@@ -591,6 +662,10 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
                         </button>
                       </td>
                     </tr>
+                    {expanded && history?.length > 0 && (
+                      <ScanHistoryRow history={history} colSpan={7} />
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>

@@ -269,6 +269,101 @@ function FixedIssuesSection({ fixedIssues }) {
   );
 }
 
+function buildIssuesCsv(report) {
+  const rows = [['Severity', 'Issue type', 'Title', 'Affected URL', 'Found on', 'Explanation', 'Recommended action']];
+  for (const issue of report.issues || []) {
+    const affectedUrl = issue.targetUrl || issue.example?.target || issue.example?.url || '';
+    const foundOn = Array.isArray(issue.example?.sources) ? (issue.example.sources[0] || '') : '';
+    rows.push([
+      issue.severity,
+      ISSUE_LABELS[issue.type] || issue.type,
+      issue.title,
+      affectedUrl,
+      foundOn,
+      issue.explanation,
+      issue.recommendedAction,
+    ]);
+  }
+  return rows
+    .map(r => r.map(cell => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(','))
+    .join('\r\n');
+}
+
+function ExportToolbar({ report }) {
+  function downloadCsv() {
+    const csv = buildIssuesCsv(report);
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }); // BOM so Excel opens UTF-8 correctly
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const date = report.scannedAt ? new Date(report.scannedAt * 1000).toISOString().slice(0, 10) : 'latest';
+    a.download = `health-report-${report.baseDomain}-${date}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  return (
+    <div className="flex items-center gap-3 mb-8 print:hidden">
+      <button onClick={downloadCsv} className="btn-secondary text-sm px-4 py-2">
+        ⬇ Export issues (CSV)
+      </button>
+      <button onClick={() => window.print()} className="btn-secondary text-sm px-4 py-2"
+        title="Opens your browser's print dialog — choose 'Save as PDF'">
+        🖨 Download PDF
+      </button>
+    </div>
+  );
+}
+
+function ShareEmbedCard({ scanId, grade }) {
+  const [copied, setCopied] = useState(null);
+  const origin = window.location.origin;
+  const reportUrl = `${origin}/report/${scanId}`;
+  const badgeUrl = `${origin}/api/badge/${scanId}`;
+  const embedCode = `<a href="${reportUrl}"><img src="${badgeUrl}" alt="Website health grade ${grade}" height="20"></a>`;
+
+  function copy(key, text) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 1500);
+    });
+  }
+
+  return (
+    <div className="card mb-8 print:hidden">
+      <h2 className="text-lg font-bold text-slate-800 mb-1">Share this report</h2>
+      <p className="text-sm text-slate-500 mb-4">
+        Send the report to your team or client, or show off your health score with a live badge on your site.
+      </p>
+      <div className="space-y-4">
+        <div>
+          <div className="text-xs font-medium text-slate-700 mb-1">Report link</div>
+          <div className="flex gap-2">
+            <input readOnly value={reportUrl}
+              className="flex-1 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-xs font-mono text-slate-600" />
+            <button onClick={() => copy('link', reportUrl)} className="btn-secondary text-xs px-4 py-2 whitespace-nowrap">
+              {copied === 'link' ? '✓ Copied!' : 'Copy link'}
+            </button>
+          </div>
+        </div>
+        <div>
+          <div className="text-xs font-medium text-slate-700 mb-1 flex items-center gap-2">
+            Health badge
+            <img src={badgeUrl} alt={`Website health grade ${grade}`} height="20" className="inline-block" />
+          </div>
+          <div className="flex gap-2">
+            <input readOnly value={embedCode}
+              className="flex-1 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-xs font-mono text-slate-600" />
+            <button onClick={() => copy('embed', embedCode)} className="btn-secondary text-xs px-4 py-2 whitespace-nowrap">
+              {copied === 'embed' ? '✓ Copied!' : 'Copy HTML'}
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">Paste into your site's footer — the badge shows this scan's grade.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WeeklyMonitoringCta() {
   const { isAuthenticated, loginWithRedirect } = useAuth0();
   const navigate = useNavigate();
@@ -357,7 +452,7 @@ export default function Report() {
             <div className="w-7 h-7 bg-brand-600 rounded-md flex items-center justify-center text-white font-bold text-sm">W</div>
             <span className="font-semibold text-slate-800">Website Health Report</span>
           </Link>
-          <nav className="flex items-center gap-5 text-sm">
+          <nav className="flex items-center gap-5 text-sm print:hidden">
             <Link to="/faq" className="text-slate-500 hover:text-slate-800 transition-colors hidden sm:inline">FAQ</Link>
             <Link to="/" className="text-brand-600 hover:underline">← New scan</Link>
           </nav>
@@ -388,9 +483,12 @@ export default function Report() {
           </div>
         </div>
 
+        {/* Export actions */}
+        <ExportToolbar report={report} />
+
         {/* Weekly monitoring CTA — top */}
         {!isAuthenticated && (
-          <div className="mb-8">
+          <div className="mb-8 print:hidden">
             <WeeklyMonitoringCta />
           </div>
         )}
@@ -437,8 +535,11 @@ export default function Report() {
           <PagesTable pages={report.pages} />
         )}
 
+        {/* Share & embed */}
+        <ShareEmbedCard scanId={id} grade={report.grade} />
+
         {/* Weekly monitoring CTA — bottom */}
-        {!isAuthenticated && <WeeklyMonitoringCta />}
+        {!isAuthenticated && <div className="print:hidden"><WeeklyMonitoringCta /></div>}
       </main>
     </div>
   );
