@@ -1,3 +1,4 @@
+import { serviceFetch } from '../functions/_lib/network.js';
 /**
  * Weekly health report email via Resend API.
  * Throws on non-2xx so the caller can log without blocking schedule advancement.
@@ -5,7 +6,7 @@
 
 export async function sendReportEmail(env, site, report) {
   const emails = JSON.parse(site.emails);
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await serviceFetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${env.RESEND_API_KEY}`,
@@ -17,8 +18,8 @@ export async function sendReportEmail(env, site, report) {
       subject: `[${report.grade}] ${report.baseDomain} — weekly health report`,
       html: buildEmailHtml(report),
     }),
-  });
-  if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
+  }, { hosts: ['api.resend.com'] });
+  if (!res.ok) throw new Error(`Resend ${res.status}`);
 }
 
 function buildEmailHtml(report) {

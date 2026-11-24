@@ -404,7 +404,7 @@ function AddSiteModal({ token, userEmail, onSuccess, onClose }) {
 
 // ── Sites section ─────────────────────────────────────────────────────────
 
-function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) {
+function SitesSection({ token, userEmail, subscription, pendingOrder, onSubscriptionChange }) {
   const [sites, setSites]               = useState([]);
   const [loading, setLoading]           = useState(true);
   const [showModal, setShowModal]       = useState(false);
@@ -412,6 +412,7 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
   const [captureMsg, setCaptureMsg]     = useState('');
 
   const isSubscribed = subscription?.status === 'active';
+  const resumableOrder = pendingOrder || sessionStorage.getItem('paypal_order_id');
 
   const loadSites = useCallback(async () => {
     setLoading(true);
@@ -423,6 +424,31 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
   }, [token]);
 
   useEffect(() => { loadSites(); }, [loadSites]);
+
+  async function finishOrder(orderId) {
+    sessionStorage.setItem('paypal_order_id', orderId);
+    setCaptureStatus('loading');
+    setCaptureMsg('Confirming payment and recurring billing…');
+    try {
+      const result = await captureProRateOrder(token, orderId);
+      if (result.pendingApproval) {
+        setCaptureStatus('pending');
+        setCaptureMsg('Your payment was received. Approve the recurring quantity in PayPal to activate this site.');
+        if (result.approveUrl) {
+          sessionStorage.setItem('paypal_order_id', orderId);
+          window.location.assign(result.approveUrl);
+        }
+      } else {
+        setCaptureStatus('ok');
+        setCaptureMsg('Site added successfully!');
+        sessionStorage.removeItem('paypal_order_id');
+        await loadSites();
+      }
+    } catch (err) {
+      setCaptureStatus('error');
+      setCaptureMsg(err.message || 'Payment could not be confirmed. Please retry.');
+    } finally { onSubscriptionChange(); }
+  }
 
   // Handle return from PayPal redirect (capture flow for subsequent sites)
   useEffect(() => {
@@ -441,26 +467,12 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
     const paypalToken = params.get('token'); // PayPal's order token
     const storedOrderId = sessionStorage.getItem('paypal_order_id');
     window.history.replaceState({}, '', '/account');
-    sessionStorage.removeItem('paypal_order_id');
 
     // Use the stored orderId (more reliable than PayPal's token param)
-    const orderId = storedOrderId || paypalToken;
+    const orderId = params.get('order_id') || storedOrderId || paypalToken;
     if (!orderId) return;
 
-    setCaptureStatus('loading');
-    setCaptureMsg('Completing payment…');
-
-    captureProRateOrder(token, orderId)
-      .then(() => {
-        setCaptureStatus('ok');
-        setCaptureMsg('Site added successfully!');
-        loadSites();
-        onSubscriptionChange();
-      })
-      .catch(err => {
-        setCaptureStatus('error');
-        setCaptureMsg(err.message || 'Payment capture failed. Please contact support.');
-      });
+    finishOrder(orderId);
   }, [token, loadSites, onSubscriptionChange]);
 
   async function handleRemove(id) {
@@ -488,6 +500,13 @@ function SitesSection({ token, userEmail, subscription, onSubscriptionChange }) 
   return (
     <div className="space-y-4">
       {/* Capture status banner */}
+      {resumableOrder && captureStatus !== 'loading' && (
+        <div className="card border border-amber-200 bg-amber-50 text-amber-900 text-sm">
+          <p className="mb-3">A site addition is awaiting payment and recurring billing confirmation. Resume to finish activation.</p>
+          <button className="btn-primary text-sm" onClick={() => finishOrder(resumableOrder)}>Complete billing approval</button>
+        </div>
+      )}
+      {captureStatus === 'pending' && <div className="card text-slate-600 text-sm">{captureMsg}</div>}
       {captureStatus === 'loading' && (
         <div className="card text-slate-600 text-sm">{captureMsg}</div>
       )}
@@ -627,6 +646,8 @@ export default function Account() {
   const [token, setToken]             = useState(null);
   const [tokenError, setTokenError]   = useState(false);
   const [subscription, setSubscription] = useState(undefined); // undefined = not loaded yet
+  const [pendingOrder, setPendingOrder] = useState(null);
+  const [billingError, setBillingError] = useState('');
 
   useEffect(() => {
     getAccessTokenSilently().then(setToken).catch(() => setTokenError(true));
@@ -637,12 +658,31 @@ export default function Account() {
     try {
       const data = await getSubscription(token);
       setSubscription(data.subscription);
+      setPendingOrder(data.pendingOrder || null);
     } catch {
       setSubscription(null);
     }
   }, [token]);
 
   useEffect(() => { loadSubscription(); }, [loadSubscription]);
+
+  async function resumeBillingChange() {
+    setBillingError('');
+    try {
+      const result = await createPayPalSubscription(token);
+      if (result.approveUrl) window.location.assign(result.approveUrl);
+      else await loadSubscription();
+    } catch (err) { setBillingError(err.message); }
+  }
+
+  useEffect(() => {
+    if (!token) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('paypal_quantity') === '1') {
+      window.history.replaceState({}, '', '/account');
+      resumeBillingChange();
+    }
+  }, [token]);
 
   async function handleCancelSubscription() {
     await cancelSubscription(token);
@@ -661,6 +701,13 @@ export default function Account() {
         {user && <ProfileCard user={user} />}
 
         {/* Subscription status card */}
+        {subscription?.pending_quantity != null && (
+          <div className="card border border-amber-200 bg-amber-50 text-sm">
+            <p className="mb-3">Confirm the updated recurring quantity in PayPal to finish your billing change.</p>
+            <button className="btn-primary text-sm" onClick={resumeBillingChange}>Resume billing update</button>
+            {billingError && <p className="text-red-600 mt-3">{billingError}</p>}
+          </div>
+        )}
         {token && subscription !== undefined && (
           <SubscriptionCard
             subscription={subscription}
@@ -677,6 +724,7 @@ export default function Account() {
             token={token}
             userEmail={user?.email || ''}
             subscription={subscription}
+            pendingOrder={pendingOrder}
             onSubscriptionChange={loadSubscription}
           />
         ) : (

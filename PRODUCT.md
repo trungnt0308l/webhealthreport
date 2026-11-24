@@ -67,6 +67,8 @@ Sign up for a free account (Google or email) to unlock automated monitoring:
 - Issue history tracking — see when each issue was first detected
 - **Issue suppression** — hide false positives or known non-issues from your reports without affecting the score
 
+Removing a site from monitoring works for both administrators and the site's owner, including sites with previous or active scans. Removal stops future scheduled scans and removes site-specific suppression and detection history. Existing scan results and report links remain accessible. A scan already in progress can finish its report; if the site has been removed when the scan completes, no monitoring email is sent.
+
 ---
 
 ## Who It's For
@@ -110,3 +112,11 @@ Sign up for a free account (Google or email) to unlock automated monitoring:
 5. Produces a scored, graded report with prioritised findings
 
 Crawl depth is capped at 5 levels. Tracking URLs, analytics pixels, and ad beacons are automatically excluded.
+
+## Production access and safety
+
+The scanner accepts public HTTPS sites only. Each redirect and discovered URL passes the same destination checks. Scheduled monitoring reports require their owning account or administrator access, including after a monitoring job is removed. New anonymous scans remain shareable by their report link. Historical reports whose owner cannot be recovered are administrator-only; records are retained. Private reports cannot be emailed to an arbitrary recipient through the anonymous email form.
+
+Paid site activation requires an active subscription and is single-use; subsequent sites require a completed payment. Diagnostic URL checking, manual HTTP scan triggering, and direct unpaid site creation are removed. See [production security boundaries](docs/production-security.md) for controls, migration compatibility and provider limits.
+
+Subsequent sites remain pending until PayPal confirms the recurring quantity, including any buyer re-approval. The account page can resume incomplete billing changes after reload. Cancelled/suspended monitoring stops when its grace period expires; completed reports remain available to their owner. Retained jobs must be removed before starting a new one-site subscription.

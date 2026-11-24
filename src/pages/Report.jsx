@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
+import { useAdmin } from '../lib/admin-context.jsx';
 import { getScanReport, addSuppression, emailReport } from '../lib/api.js';
 import { scoreColor, scoreBgColor, severityBadgeClass, gradeDescription, shortUrl, downloadCsv } from '../lib/format.js';
 
@@ -404,25 +405,30 @@ function WeeklyMonitoringCta() {
 
 export default function Report() {
   const { id } = useParams();
-  const { isAuthenticated, getAccessTokenSilently, user } = useAuth0();
+  const { isAuthenticated, isLoading, getAccessTokenSilently, loginWithRedirect, user } = useAuth0();
+  const [adminKey] = useAdmin();
   const [report, setReport] = useState(null);
   const [error, setError] = useState('');
   const [token, setToken] = useState(null);
 
   useEffect(() => {
-    getScanReport(id)
+    if (isLoading) return;
+    let active = true;
+    setReport(null);
+    setError('');
+    (async () => {
+      const bearer = adminKey || (isAuthenticated ? await getAccessTokenSilently() : null);
+      if (active) setToken(bearer);
+      return getScanReport(id, bearer);
+    })()
       .then(data => {
+        if (!active) return;
         if (data) setReport(data);
         else setError('Report not ready yet.');
       })
-      .catch(() => setError('Could not load report.'));
-  }, [id]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      getAccessTokenSilently().then(setToken).catch(() => {});
-    }
-  }, [isAuthenticated]);
+      .catch(() => { if (active) setError('Report unavailable. Sign in to the owning account, or open it from the admin dashboard.'); });
+    return () => { active = false; };
+  }, [id, isLoading, isAuthenticated, getAccessTokenSilently, adminKey]);
 
   useEffect(() => {
     if (report?.baseDomain) {
@@ -436,6 +442,8 @@ export default function Report() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="card text-center max-w-sm">
           <p className="text-slate-600 mb-4">{error}</p>
+          {!isAuthenticated && <button className="btn-primary mb-4" onClick={() => loginWithRedirect({ appState: { returnTo: `/report/${id}` } })}>Sign in</button>}
+          <Link to="/monitor" className="block text-brand-600 text-sm mb-4">Open admin dashboard</Link>
           <Link to="/" className="text-brand-600 text-sm hover:underline">← Start a new scan</Link>
         </div>
       </div>
@@ -494,7 +502,7 @@ export default function Report() {
         </div>
 
         {/* Email capture */}
-        <EmailReportForm scanId={id} prefillEmail={user?.email} />
+        {report.canEmail && <EmailReportForm scanId={id} prefillEmail={user?.email} />}
 
         {/* Weekly monitoring CTA — top */}
         {!isAuthenticated && (
@@ -533,7 +541,7 @@ export default function Report() {
             issues={report.issues}
             pages={report.pages}
             siteId={report.siteId}
-            token={token}
+            token={adminKey ? null : token}
             report={report}
           />
         )}

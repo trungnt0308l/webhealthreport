@@ -6,11 +6,7 @@
  * - Short timeout per hop
  */
 
-const FETCH_TIMEOUT_MS = 8000;
-const MAX_REDIRECTS = 15;
-// Hard cap on total checkUrl wall-clock time. HEAD + GET fallback = up to 16 s raw,
-// but the outer 10 s cap abandons slow HEAD→GET paths early. Well below the 120s stale-reset threshold.
-const CHECKURL_TIMEOUT_MS = 10_000;
+import { crawlFetch } from './network.js';
 
 // Full browser header set — sending only User-Agent triggers bot detection on
 // many WAFs (Cloudflare, Akamai, DataDome). These headers match Chrome 146 on Windows.
@@ -18,7 +14,6 @@ const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
   'Accept-Language': 'en-US,en;q=0.9',
-  'Accept-Encoding': 'gzip, deflate, br',
   'sec-ch-ua': '"Chromium";v="146", "Google Chrome";v="146", "Not-A.Brand";v="24"',
   'sec-ch-ua-mobile': '?0',
   'sec-ch-ua-platform': '"Windows"',
@@ -38,41 +33,12 @@ export async function doFetch(url, method, { referer } = {}) {
     ? { ...BROWSER_HEADERS, 'Referer': referer, 'sec-fetch-site': 'same-origin' }
     : BROWSER_HEADERS;
   const start = Date.now();
-  let currentUrl = url;
-  let redirectCount = 0;
-
-  while (redirectCount <= MAX_REDIRECTS) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    try {
-      const response = await fetch(currentUrl, {
-        method,
-        redirect: 'manual',
-        signal: controller.signal,
-        headers,
-      });
-      clearTimeout(timer);
-
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('location');
-        response.body?.cancel();
-        if (!location) {
-          return { status: response.status, finalUrl: currentUrl, redirectCount, responseMs: Date.now() - start, error: null };
-        }
-        redirectCount++;
-        currentUrl = new URL(location, currentUrl).href;
-        continue;
-      }
-
-      response.body?.cancel();
-      return { status: response.status, finalUrl: currentUrl, redirectCount, responseMs: Date.now() - start, error: null };
-    } catch {
-      clearTimeout(timer);
-      return { status: null, finalUrl: url, redirectCount, responseMs: Date.now() - start, error: 'error' };
-    }
+  try {
+    const { response, finalUrl, redirectCount } = await crawlFetch(url, { method, headers, body: false });
+    return { status: response.status, finalUrl, redirectCount, responseMs: Date.now() - start, error: null };
+  } catch {
+    return { status: null, finalUrl: url, redirectCount: 0, responseMs: Date.now() - start, error: 'error' };
   }
-
-  return { status: null, finalUrl: currentUrl, redirectCount, responseMs: Date.now() - start, error: 'too_many_redirects' };
 }
 
 /**
@@ -90,21 +56,12 @@ async function _checkUrl(url, { referer } = {}) {
 }
 
 export function checkUrl(url, { referer } = {}) {
-  return Promise.race([
-    _checkUrl(url, { referer }),
-    new Promise(resolve =>
-      setTimeout(
-        () => resolve({ status: null, finalUrl: url, redirectCount: 0, responseMs: CHECKURL_TIMEOUT_MS, error: 'timeout' }),
-        CHECKURL_TIMEOUT_MS
-      )
-    ),
-  ]);
+  return _checkUrl(url, { referer });
 }
 
 /**
  * Fetch a page for HTML parsing.
- * Uses redirect: 'follow' (needed to get response body), then probes for exact
- * redirect count via a secondary HEAD if the URL changed.
+ * Validates each redirect before fetching, and buffers only bounded HTML.
  * Returns { response, responseMs, finalUrl, redirectCount }.
  */
 export async function fetchPage(url, { referer } = {}) {
@@ -112,30 +69,7 @@ export async function fetchPage(url, { referer } = {}) {
     ? { ...BROWSER_HEADERS, 'Referer': referer, 'sec-fetch-site': 'same-origin' }
     : BROWSER_HEADERS;
   const start = Date.now();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      signal: controller.signal,
-      headers,
-    });
-    clearTimeout(timer);
-    const finalUrl = response.url || url;
-
-    // Count redirects only when the URL actually changed (no extra request for non-redirecting pages)
-    let redirectCount = 0;
-    if (finalUrl !== url) {
-      const probe = await doFetch(url, 'HEAD', { referer });
-      redirectCount = probe.redirectCount ?? 1;
-    }
-
-    return { response, responseMs: Date.now() - start, finalUrl, redirectCount };
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
+  return { ...await crawlFetch(url, { headers }), responseMs: Date.now() - start };
 }
 
 /**

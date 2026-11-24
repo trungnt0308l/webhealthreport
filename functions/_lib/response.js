@@ -17,6 +17,9 @@ export function corsJson(request, env, data, status = 200) {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
       'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+      'Vary': 'Origin',
     },
   });
 }
@@ -37,13 +40,4 @@ export function corsOptions(request, env, methods = 'GET, POST, OPTIONS') {
       'Access-Control-Max-Age': '86400',
     },
   });
-}
-
-/**
- * Parse the request body as JSON.
- * Returns null if parsing fails (instead of throwing).
- * @param {Request} request
- */
-export function parseBody(request) {
-  return request.json();
 }

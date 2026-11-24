@@ -5,14 +5,12 @@
  */
 import { generateReport } from '../../../_lib/report.js';
 import { corsJson } from '../../../_lib/response.js';
-import { getAllowedOrigin } from '../../../_lib/cors.js';
+import { accessibleScan } from '../../../_lib/scan-access.js';
 
 export async function onRequestGet({ params, request, env }) {
   const { id: scanId } = params;
 
-  const scan = await env.DB.prepare(
-    `SELECT status, site_id FROM scans WHERE id = ?`
-  ).bind(scanId).first();
+  const scan = await accessibleScan(request, env, scanId);
 
   if (!scan) {
     return corsJson(request, env, { error: 'Not found' }, 404);
@@ -32,18 +30,11 @@ export async function onRequestGet({ params, request, env }) {
     ).bind(scanId).first();
 
     if (cached?.rendered_summary_json) {
-      // Return pre-serialized JSON directly to avoid double-serialization
-      return new Response(cached.rendered_summary_json, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
-          'X-Content-Type-Options': 'nosniff',
-        },
-      });
+      return corsJson(request, env, { ...JSON.parse(cached.rendered_summary_json), canEmail: scan.access_scope === 'public' });
     }
   }
 
   // Generate (or regenerate with live overlay for monitored sites)
-  const summary = await generateReport(env, scanId, null, null, null, siteId);
-  return corsJson(request, env, summary);
+  const summary = await generateReport(env, scanId, scan, null, null, siteId);
+  return corsJson(request, env, { ...summary, canEmail: scan.access_scope === 'public' });
 }

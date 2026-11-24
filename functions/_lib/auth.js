@@ -3,9 +3,10 @@
  * Uses RS256 asymmetric verification — no secret needed, only Auth0's public JWKS keys.
  */
 
-// Module-level JWKS cache (lives for the lifetime of a Worker instance)
-let jwksCache = null;
-let jwksCacheTime = 0;
+import { serviceFetch } from './network.js';
+import { trustedOrigin, isWrite } from './request.js';
+// Cache is keyed by issuer, so tenants never share verification keys.
+const jwksCaches = new Map();
 const JWKS_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
@@ -13,14 +14,17 @@ const JWKS_TTL_MS = 60 * 60 * 1000; // 1 hour
  */
 async function getJwks(env) {
   const now = Date.now();
-  if (jwksCache && now - jwksCacheTime < JWKS_TTL_MS) {
-    return jwksCache;
+  const cached = jwksCaches.get(env.AUTH0_DOMAIN);
+  if (cached && now - cached.time < JWKS_TTL_MS) {
+    return cached.keys;
   }
-  const res = await fetch(`https://${env.AUTH0_DOMAIN}/.well-known/jwks.json`);
+  if (!/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(env.AUTH0_DOMAIN || '')) throw new Error('Invalid issuer');
+  const res = await serviceFetch(`https://${env.AUTH0_DOMAIN}/.well-known/jwks.json`, {}, { hosts: [env.AUTH0_DOMAIN], limit: 65536 });
   if (!res.ok) throw new Error('Failed to fetch JWKS');
-  jwksCache = await res.json();
-  jwksCacheTime = now;
-  return jwksCache;
+  const keys = await res.json();
+  if (jwksCaches.size >= 8) jwksCaches.clear();
+  jwksCaches.set(env.AUTH0_DOMAIN, { keys, time: now });
+  return keys;
 }
 
 /**
@@ -51,6 +55,7 @@ async function importRsaPublicKey(jwk) {
  * Returns the decoded payload { sub, email, name, ... } or throws on failure.
  */
 export async function verifyAuth0JWT(token, env) {
+  if (typeof token !== 'string' || token.length > 16384) throw new Error('Invalid JWT');
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Invalid JWT format');
 
@@ -63,7 +68,7 @@ export async function verifyAuth0JWT(token, env) {
   } catch {
     throw new Error('Invalid JWT header');
   }
-  if (header.alg !== 'RS256') throw new Error('Expected RS256 algorithm');
+  if (header.alg !== 'RS256' || typeof header.kid !== 'string' || !header.kid || header.crit) throw new Error('Invalid JWT header');
 
   // Find matching key in JWKS
   const jwks = await getJwks(env);
@@ -86,7 +91,9 @@ export async function verifyAuth0JWT(token, env) {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  if (payload.exp && payload.exp < now) throw new Error('JWT expired');
+  if (!Number.isFinite(payload.exp) || payload.exp <= now) throw new Error('JWT expired');
+  if (payload.nbf !== undefined && (!Number.isFinite(payload.nbf) || payload.nbf > now)) throw new Error('JWT not active');
+  if (typeof payload.sub !== 'string' || !payload.sub.trim() || payload.sub.length > 255) throw new Error('JWT subject required');
   if (payload.iss !== `https://${env.AUTH0_DOMAIN}/`) throw new Error('JWT issuer mismatch');
 
   // aud can be a string or array
@@ -124,6 +131,8 @@ export function requireAuth(handler) {
       name: payload.name || payload['https://webhealthreport/name'] || '',
     };
 
+    if (isWrite(request) && !trustedOrigin(request, env)) return json({ error: 'Forbidden origin' }, 403);
+
     return handler(ctx);
   };
 }
@@ -134,6 +143,6 @@ export function requireAuth(handler) {
 export function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' },
   });
 }

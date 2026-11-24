@@ -1,3 +1,13 @@
+import { serviceFetch, opaqueId } from './network.js';
+import { verifyPaypalSignature } from './paypal-signature.js';
+import { createHash } from 'node:crypto';
+
+const PAYPAL_HOSTS = ['api-m.paypal.com', 'api-m.sandbox.paypal.com'];
+function base(env) {
+  if (!['https://api-m.paypal.com', 'https://api-m.sandbox.paypal.com'].includes(env.PAYPAL_BASE_URL)) throw new Error('Invalid PayPal API origin');
+  return env.PAYPAL_BASE_URL;
+}
+function fetchPaypal(url, options) { return serviceFetch(url, options, { hosts: PAYPAL_HOSTS }); }
 /**
  * PayPal REST API client for Cloudflare Workers.
  * Uses fetch() — no Node.js SDK required.
@@ -5,15 +15,17 @@
  */
 
 // In-memory token cache: survives for the Worker isolate lifetime
-let _tokenCache = null;
+const tokenCaches = new Map();
 
 async function getAccessToken(env) {
+  const cacheKey = `${base(env)}:${env.PAYPAL_CLIENT_ID}`;
+  const _tokenCache = tokenCaches.get(cacheKey);
   const now = Date.now();
   if (_tokenCache && _tokenCache.expiresAt > now + 60_000) {
     return _tokenCache.token;
   }
   const creds = btoa(`${env.PAYPAL_CLIENT_ID}:${env.PAYPAL_CLIENT_SECRET}`);
-  const res = await fetch(`${env.PAYPAL_BASE_URL}/v1/oauth2/token`, {
+  const res = await fetchPaypal(`${base(env)}/v1/oauth2/token`, {
     method: 'POST',
     headers: {
       'Authorization': `Basic ${creds}`,
@@ -22,22 +34,22 @@ async function getAccessToken(env) {
     body: 'grant_type=client_credentials',
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`PayPal auth failed ${res.status}: ${text}`);
+    throw new Error(`PayPal auth failed ${res.status}`);
   }
   const data = await res.json();
-  _tokenCache = { token: data.access_token, expiresAt: now + data.expires_in * 1000 };
-  return _tokenCache.token;
+  if (tokenCaches.size >= 8) tokenCaches.clear();
+  tokenCaches.set(cacheKey, { token: data.access_token, expiresAt: now + data.expires_in * 1000 });
+  return data.access_token;
 }
 
-async function paypalFetch(env, method, path, body = null) {
+async function paypalFetch(env, method, path, body = null, extraHeaders = {}) {
   const token = await getAccessToken(env);
   const opts = {
     method,
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', ...extraHeaders },
   };
   if (body !== null) opts.body = JSON.stringify(body);
-  const res = await fetch(`${env.PAYPAL_BASE_URL}${path}`, opts);
+  const res = await fetchPaypal(`${base(env)}${path}`, opts);
 
   if (res.status === 204) return null; // No Content
 
@@ -76,25 +88,27 @@ export async function createSubscription(env, userId, quantity, returnUrl, cance
 
 /** Fetch full subscription details from PayPal (includes billing_info.next_billing_time). */
 export async function getSubscription(env, subscriptionId) {
-  return paypalFetch(env, 'GET', `/v1/billing/subscriptions/${subscriptionId}`);
+  return paypalFetch(env, 'GET', `/v1/billing/subscriptions/${opaqueId(subscriptionId)}`);
 }
 
 /**
  * Update subscription quantity — takes effect at next renewal cycle.
  * PayPal prorates nothing; our order/create+capture handles mid-cycle charges.
  */
-export async function reviseSubscription(env, subscriptionId, quantity) {
-  return paypalFetch(env, 'POST', `/v1/billing/subscriptions/${subscriptionId}/revise`, {
+export async function reviseSubscription(env, subscriptionId, quantity, returnPath = '/account?paypal_quantity=1') {
+  const origin = env.ALLOWED_ORIGIN || 'https://webhealthreport.pages.dev';
+  return paypalFetch(env, 'POST', `/v1/billing/subscriptions/${opaqueId(subscriptionId)}/revise`, {
     plan_id: env.PAYPAL_PLAN_ID,
     quantity: String(quantity),
+    application_context: { return_url: origin + returnPath, cancel_url: origin + '/account?paypal_revision_cancelled=1', shipping_preference: 'NO_SHIPPING' },
   });
 }
 
 /** Cancel a subscription. 204 = success, 422 = already cancelled — both are OK. */
 export async function cancelSubscription(env, subscriptionId, reason = 'User cancelled') {
   const token = await getAccessToken(env);
-  const res = await fetch(
-    `${env.PAYPAL_BASE_URL}/v1/billing/subscriptions/${subscriptionId}/cancel`,
+  const res = await fetchPaypal(
+    `${base(env)}/v1/billing/subscriptions/${opaqueId(subscriptionId)}/cancel`,
     {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -128,7 +142,21 @@ export async function createOrder(env, amount, returnUrl, cancelUrl) {
 
 /** Capture an approved v2 order. */
 export async function captureOrder(env, orderId) {
-  return paypalFetch(env, 'POST', `/v2/checkout/orders/${orderId}/capture`, {});
+  const requestId = createHash('sha256').update(`capture:${opaqueId(orderId)}`).digest('hex').slice(0, 32);
+  return paypalFetch(env, 'POST', `/v2/checkout/orders/${opaqueId(orderId)}/capture`, {}, { 'PayPal-Request-Id': requestId });
+}
+
+export function getOrder(env, orderId) {
+  return paypalFetch(env, 'GET', `/v2/checkout/orders/${opaqueId(orderId)}`);
+}
+
+export function approvalUrl(result) {
+  const value = result?.links?.find(link => ['approve', 'payer-action'].includes(link.rel))?.href;
+  if (!value) return null;
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.username || url.password || url.port ||
+      !['www.paypal.com', 'www.sandbox.paypal.com', 'paypal.com', 'sandbox.paypal.com'].includes(url.hostname)) throw new Error('Invalid approval URL');
+  return url.href;
 }
 
 /**
@@ -136,25 +164,5 @@ export async function captureOrder(env, orderId) {
  * rawBody MUST be the raw request body string (not re-serialised JSON).
  */
 export async function verifyWebhookSignature(env, request, rawBody) {
-  const token = await getAccessToken(env);
-  const payload = {
-    auth_algo:         request.headers.get('paypal-auth-algo'),
-    cert_url:          request.headers.get('paypal-cert-url'),
-    transmission_id:   request.headers.get('paypal-transmission-id'),
-    transmission_sig:  request.headers.get('paypal-transmission-sig'),
-    transmission_time: request.headers.get('paypal-transmission-time'),
-    webhook_id:        env.PAYPAL_WEBHOOK_ID,
-    webhook_event:     JSON.parse(rawBody),
-  };
-  const res = await fetch(
-    `${env.PAYPAL_BASE_URL}/v1/notifications/verify-webhook-signature`,
-    {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }
-  );
-  if (!res.ok) return false;
-  const data = await res.json();
-  return data.verification_status === 'SUCCESS';
+  return verifyPaypalSignature(env, request, rawBody);
 }

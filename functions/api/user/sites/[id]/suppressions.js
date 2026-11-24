@@ -1,3 +1,4 @@
+import { parseJson } from '../../../../_lib/request.js';
 /**
  * POST   /api/user/sites/:id/suppressions  — mark an issue as "not an issue" for this site
  * DELETE /api/user/sites/:id/suppressions  — un-suppress a previously suppressed issue
@@ -12,7 +13,7 @@ export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 
 
 async function parseBody(request) {
   try {
-    return await request.json();
+    return await parseJson(request);
   } catch {
     return null;
   }

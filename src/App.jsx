@@ -1,3 +1,5 @@
+import { relativeRedirect } from './lib/security.js';
+import { AdminProvider } from './lib/admin-context.jsx';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
 import Home from './pages/Home.jsx';
@@ -28,7 +30,7 @@ function Auth0ProviderWithNavigate({ children }) {
   const navigate = useNavigate();
 
   const onRedirectCallback = (appState) => {
-    navigate(appState?.returnTo || '/account');
+    navigate(relativeRedirect(appState?.returnTo));
   };
 
   return (
@@ -50,6 +52,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Auth0ProviderWithNavigate>
+        <AdminProvider>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/scan/:id" element={<ScanProgress />} />
@@ -66,6 +69,7 @@ export default function App() {
             }
           />
         </Routes>
+        </AdminProvider>
       </Auth0ProviderWithNavigate>
     </BrowserRouter>
   );

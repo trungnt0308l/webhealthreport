@@ -1,3 +1,5 @@
+import { siteUrl } from '../../../_lib/network.js';
+import { parseJson } from '../../../_lib/request.js';
 /**
  * POST /api/paypal/subscription/activate
  * Called after the user approves their first PayPal subscription.
@@ -15,12 +17,13 @@ import { corsOptions } from '../../../_lib/response.js';
 import { normalizeUrl, getBaseDomain } from '../../../_lib/crawl.js';
 import { EMAIL_RE, generateId } from '../../../_lib/constants.js';
 import * as paypal from '../../../_lib/paypal.js';
+import { withBillingLock } from '../../../_lib/billing-lock.js';
 
 export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 'POST, OPTIONS');
 
-export const onRequestPost = requireAuth(async ({ request, env, data }) => {
+export const onRequestPost = requireAuth(withBillingLock(async ({ request, env, data }) => {
   let body;
-  try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+  try { body = await parseJson(request); } catch { return json({ error: 'Invalid JSON' }, 400); }
 
   const { subscriptionId, url: rawUrl, emails: rawEmails } = body;
   if (!subscriptionId) return json({ error: 'subscriptionId is required' }, 400);
@@ -40,14 +43,14 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   if (sub.plan_id !== env.PAYPAL_PLAN_ID) {
     return json({ error: 'Invalid subscription plan' }, 403);
   }
-  if (!['APPROVAL_PENDING', 'ACTIVE'].includes(sub.status)) {
+  if (sub.status !== 'ACTIVE') {
     return json({ error: `Subscription not approved (status: ${sub.status})` }, 400);
   }
 
   // Validate site URL
   let startUrl;
   try {
-    startUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    startUrl = siteUrl(rawUrl);
     new URL(startUrl);
   } catch {
     return json({ error: 'Invalid URL' }, 400);
@@ -72,21 +75,35 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   const siteId = generateId();
   const nextScanAt = now + Math.floor(Math.random() * 86400);
 
-  // INSERT OR REPLACE: handles both first-time activation and re-subscription after cancellation.
-  // On retry (same subscriptionId, row already active): REPLACE resets site_count to 1 which is
-  // correct since this path always adds exactly one site. On re-subscribe (new subscriptionId,
-  // old cancelled row exists): REPLACE overwrites the stale cancelled row.
-  await env.DB.prepare(
-    `INSERT OR REPLACE INTO user_subscriptions
-     (user_id, paypal_subscription_id, status, site_count, next_billing_date, created_at, updated_at)
-     VALUES (?, ?, 'active', 1, ?, ?, ?)`
-  ).bind(data.user.id, subscriptionId, nextBillingDate, now, now).run();
+  const existing = await env.DB.prepare('SELECT site_id FROM subscription_activations WHERE subscription_id = ? AND user_id = ?')
+    .bind(subscriptionId, data.user.id).first();
+  if (existing) return json({ ok: true, siteId: existing.site_id });
+  const retained = await env.DB.prepare('SELECT id FROM monitored_sites WHERE user_id = ? LIMIT 1').bind(data.user.id).first();
+  if (retained) return json({ error: 'Remove retained monitoring sites before starting a new subscription.' }, 409);
+  if (Number(sub.quantity || '1') !== 1) return json({ error: 'Unexpected subscription quantity' }, 409);
 
-  // Add the first monitored site
-  await env.DB.prepare(
-    `INSERT INTO monitored_sites (id, url, base_domain, emails, next_scan_at, created_at, user_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).bind(siteId, startUrl, baseDomain, JSON.stringify(emails), nextScanAt, now, data.user.id).run();
+  // One atomic activation creates exactly one site; replay cannot reset quantity
+  // or add more sites without going through a captured payment.
+  const [claim] = await env.DB.batch([
+    env.DB.prepare(`INSERT OR IGNORE INTO subscription_activations (subscription_id, user_id, site_id, created_at)
+      SELECT ?, ?, ?, ? WHERE NOT EXISTS
+      (SELECT 1 FROM user_subscriptions WHERE user_id = ? AND status != 'cancelled')
+      AND NOT EXISTS (SELECT 1 FROM monitored_sites WHERE user_id = ?)`)
+      .bind(subscriptionId, data.user.id, siteId, now, data.user.id, data.user.id),
+    env.DB.prepare(`INSERT INTO user_subscriptions
+     (user_id, paypal_subscription_id, status, site_count, next_billing_date, created_at, updated_at)
+     SELECT ?, ?, 'active', 1, ?, ?, ? WHERE changes() = 1
+     ON CONFLICT(user_id) DO UPDATE SET paypal_subscription_id = excluded.paypal_subscription_id,
+       status = 'active', site_count = 1, next_billing_date = excluded.next_billing_date,
+       grace_period_ends_at = NULL, payment_failed_at = NULL, updated_at = excluded.updated_at`)
+      .bind(data.user.id, subscriptionId, nextBillingDate, now, now),
+
+    // Add the first monitored site in the same transaction.
+    env.DB.prepare(`INSERT INTO monitored_sites (id, url, base_domain, emails, next_scan_at, created_at, user_id)
+     SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`)
+      .bind(siteId, startUrl, baseDomain, JSON.stringify(emails), nextScanAt, now, data.user.id),
+  ]);
+  if (!claim.meta.changes) return json({ error: 'Subscription already activated' }, 409);
 
   return json({ ok: true, siteId }, 201);
-});
+}));

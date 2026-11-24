@@ -169,7 +169,7 @@ test.describe('Report page', () => {
       route.abort('failed')
     );
     await page.goto(`/report/fail-test`);
-    await expect(page.getByText('Could not load report.')).toBeVisible();
+    await expect(page.getByText(/Report unavailable\./)).toBeVisible();
     await expect(page.getByText('← Start a new scan')).toBeVisible();
   });
 });

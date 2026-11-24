@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:api": "node --test tests/api/*.test.js",
+    "test:runtime": "node --test tests/runtime/*.test.js"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.16.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.2"
+    "react-router-dom": "7.18.6"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

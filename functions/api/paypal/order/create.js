@@ -1,3 +1,5 @@
+import { siteUrl } from '../../../_lib/network.js';
+import { parseJson } from '../../../_lib/request.js';
 /**
  * POST /api/paypal/order/create
  * Creates a one-time PayPal order for the prorated mid-cycle charge when adding
@@ -26,7 +28,7 @@ export const onRequestOptions = ({ request, env }) => corsOptions(request, env, 
 
 export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   let body;
-  try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+  try { body = await parseJson(request); } catch { return json({ error: 'Invalid JSON' }, 400); }
 
   const { url: rawUrl, emails: rawEmails } = body;
   if (!rawUrl) return json({ error: 'url is required' }, 400);
@@ -53,7 +55,7 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   // Validate site URL
   let startUrl;
   try {
-    startUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    startUrl = siteUrl(rawUrl);
     new URL(startUrl);
   } catch {
     return json({ error: 'Invalid URL' }, 400);
@@ -86,8 +88,8 @@ export const onRequestPost = requireAuth(async ({ request, env, data }) => {
   // (capture.js reads from here — never from client request body)
   await env.DB.prepare(
     `INSERT INTO paypal_pending_orders
-     (order_id, user_id, amount, sites_to_add, site_url, site_emails, created_at)
-     VALUES (?, ?, ?, 1, ?, ?, ?)`
+     (order_id, user_id, amount, sites_to_add, site_url, site_emails, created_at, activation_state)
+     VALUES (?, ?, ?, 1, ?, ?, ?, 'pending')`
   ).bind(order.id, data.user.id, proratedAmount, startUrl, JSON.stringify(emails), now).run();
 
   return json({ orderId: order.id, proratedAmount, daysRemaining, approveUrl: approveLink?.href });

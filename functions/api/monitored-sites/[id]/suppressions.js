@@ -1,3 +1,4 @@
+import { parseJson } from '../../../_lib/request.js';
 /**
  * POST   /api/monitored-sites/:id/suppressions — add suppression (admin)
  * DELETE /api/monitored-sites/:id/suppressions — remove suppression (admin)
@@ -16,7 +17,7 @@ export function onRequestOptions({ request, env }) {
 
 async function parseBody(request) {
   try {
-    return await request.json();
+    return await parseJson(request);
   } catch {
     return null;
   }

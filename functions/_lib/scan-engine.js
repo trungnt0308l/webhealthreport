@@ -7,6 +7,7 @@
 import { normalizeUrl, normalizeExternalUrl, normalizeImageUrl, parseHtml, isInternalUrl, isHtmlContentType, isTrackingUrl } from './crawl.js';
 import { checkBatch, fetchPage } from './checker.js';
 import { detectIssues, BOT_BLOCKED_STATUSES } from './issues.js';
+import { monitoringAllowed } from './entitlements.js';
 
 const HTML_BATCH_SIZE = 15;
 const HEAD_BATCH_SIZE = 80;
@@ -86,8 +87,8 @@ async function finalize(env, scan, scanId, siteId = null) {
       await batchAll(env, issues.map(i =>
         env.DB.prepare(
           `INSERT OR IGNORE INTO issue_history (site_id, issue_type, target_url, first_detected_at)
-           VALUES (?, ?, ?, ?)`
-        ).bind(siteId, i.issue_type, i.target_url ?? '', now)
+           SELECT id, ?, ?, ? FROM monitored_sites WHERE id = ?`
+        ).bind(i.issue_type, i.target_url ?? '', now, siteId)
       ));
     }
   }
@@ -105,6 +106,10 @@ export async function processBatch(env, scanId, siteId = null) {
 
   if (scan.status === 'complete' || scan.status === 'failed') {
     return { status: scan.status, recentChecks: [] };
+  }
+  if (scan.site_id && !await monitoringAllowed(env.DB, scan.site_id)) {
+    await env.DB.prepare("UPDATE scans SET status = 'failed', error_message = 'Monitoring subscription inactive', finished_at = unixepoch() WHERE id = ?").bind(scanId).run();
+    return { status: 'failed', recentChecks: [] };
   }
 
   const LIMITS = scan.site_id ? PREMIUM_LIMITS : FREE_LIMITS;

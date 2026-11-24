@@ -6,6 +6,6 @@
 export function getAllowedOrigin(request, env) {
   const origin = request.headers.get('Origin') || '';
   const allowed = env.ALLOWED_ORIGIN || 'https://webhealthreport.pages.dev';
-  if (origin === allowed || origin.startsWith('http://localhost')) return origin;
+  if (origin === allowed) return origin;
   return allowed;
 }

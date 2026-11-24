@@ -1,3 +1,4 @@
+import { scriptJson } from '../lib/security.js';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
@@ -74,7 +75,7 @@ export default function Home() {
     const script = document.createElement('script');
     script.type = 'application/ld+json';
     script.id = 'ld-howto';
-    script.textContent = JSON.stringify({
+    script.textContent = scriptJson({
       '@context': 'https://schema.org',
       '@type': 'HowTo',
       'name': 'How to scan your website for broken links and technical issues',

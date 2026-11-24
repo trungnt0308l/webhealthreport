@@ -3,17 +3,11 @@
  * Uses constant-time comparison to avoid timing attacks on the MONITOR_SECRET.
  */
 
+import { trustedOrigin, isWrite } from './request.js';
+import { createHash, timingSafeEqual as compare } from 'node:crypto';
+
 function timingSafeEqual(a, b) {
-  const enc = new TextEncoder();
-  const aB = enc.encode(a);
-  const bB = enc.encode(b);
-  // Always compare full length to avoid length oracle
-  let result = aB.length !== bB.length ? 1 : 0;
-  const len = Math.max(aB.length, bB.length);
-  for (let i = 0; i < len; i++) {
-    result |= (aB[i] ?? 0) ^ (bB[i] ?? 0);
-  }
-  return result === 0;
+  return compare(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
 }
 
 /**
@@ -26,5 +20,6 @@ export function adminAuthCheck(request, env, jsonFn) {
   if (!key || !env.MONITOR_SECRET || !timingSafeEqual(key, env.MONITOR_SECRET)) {
     return jsonFn({ error: 'Access denied' }, 403);
   }
+  if (isWrite(request) && !trustedOrigin(request, env)) return jsonFn({ error: 'Forbidden origin' }, 403);
   return null;
 }

@@ -13,14 +13,14 @@ export async function startScan(url, turnstileToken) {
   return res.json();
 }
 
-export async function getScanStatus(scanId) {
-  const res = await fetch(`${BASE}/scans/${scanId}/status`);
+export async function getScanStatus(scanId, token) {
+  const res = await fetch(`${BASE}/scans/${scanId}/status`, { headers: token ? bearerHeaders(token) : {} });
   if (!res.ok) throw new Error('Failed to fetch status');
   return res.json();
 }
 
-export async function getScanReport(scanId) {
-  const res = await fetch(`${BASE}/scans/${scanId}/report`);
+export async function getScanReport(scanId, token) {
+  const res = await fetch(`${BASE}/scans/${scanId}/report`, { headers: token ? bearerHeaders(token) : {} });
   if (res.status === 202) return null; // not ready
   if (!res.ok) throw new Error('Failed to fetch report');
   return res.json();
@@ -88,20 +88,6 @@ export async function getUserSites(token) {
   return res.json();
 }
 
-export async function addUserSite(token, url, emails) {
-  const res = await fetch(`${BASE}/user/sites`, {
-    method: 'POST',
-    headers: bearerHeaders(token, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify(emails ? { url, emails } : { url }),
-  });
-  if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to add site');
-  }
-  return res.json();
-}
-
 export async function updateUserSiteEmails(token, id, emails) {
   const res = await fetch(`${BASE}/user/sites/${id}`, {
     method: 'PATCH',
@@ -122,20 +108,9 @@ export async function removeUserSite(token, id) {
     headers: bearerHeaders(token),
   });
   if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
-  if (!res.ok) throw new Error('Failed to remove site');
-  return res.json();
-}
-
-export async function debugCheckUrl(key, url) {
-  const res = await fetch(`${BASE}/debug/check-url`, {
-    method: 'POST',
-    headers: bearerHeaders(key, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ url }),
-  });
-  if (res.status === 403) throw Object.assign(new Error('Access denied'), { status: 403 });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Check failed');
+    throw new Error(res.status === 409 ? (err.error || 'Billing update in progress') : 'Failed to remove site');
   }
   return res.json();
 }
@@ -184,7 +159,10 @@ export async function cancelSubscription(token) {
     headers: bearerHeaders(token),
   });
   if (res.status === 401) throw Object.assign(new Error('Not authenticated'), { status: 401 });
-  if (!res.ok) throw new Error('Failed to cancel subscription');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to cancel subscription');
+  }
   return res.json();
 }
 

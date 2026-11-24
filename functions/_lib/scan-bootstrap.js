@@ -1,3 +1,4 @@
+import { siteUrl } from './network.js';
 /**
  * bootstrapScan — creates the scan record, fetches the homepage, and seeds the crawl queue.
  * Extracted so it can be called by both the HTTP handler (scans/index.js) and the scheduler.
@@ -5,6 +6,7 @@
  */
 import { normalizeUrl, normalizeImageUrl, getBaseDomain, parseHtml, isInternalUrl, isHtmlContentType } from './crawl.js';
 import { fetchPage } from './checker.js';
+import { monitoringAllowed } from './entitlements.js';
 
 /**
  * @param {object} env         - Cloudflare env (must have DB binding)
@@ -16,7 +18,8 @@ import { fetchPage } from './checker.js';
  * @throws on network failure or DB error
  */
 export async function bootstrapScan(env, scanId, rawUrl, baseDomain, siteId = null) {
-  const startUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+  if (siteId && !await monitoringAllowed(env.DB, siteId)) throw new Error('Monitoring subscription inactive');
+  const startUrl = siteUrl(rawUrl);
   const normalizedStart = normalizeUrl(startUrl, startUrl);
   if (!normalizedStart) throw new Error('Could not normalize URL: ' + rawUrl);
 
@@ -39,6 +42,11 @@ export async function bootstrapScan(env, scanId, rawUrl, baseDomain, siteId = nu
        started_at = excluded.started_at,
        current_step = 'Checking homepage'`
   ).bind(scanId, startUrl, normalizedStart, resolvedBaseDomain, siteId, now).run();
+
+  // Scope is independent of site_id and survives deletion of the monitoring job.
+  await env.DB.prepare(`UPDATE scans SET access_scope = ?, access_owner_id =
+    (SELECT user_id FROM monitored_sites WHERE id = ?) WHERE id = ?`)
+    .bind(siteId ? 'restricted' : 'public', siteId, scanId).run();
 
   let homepageOk = true;
   try {

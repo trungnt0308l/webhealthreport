@@ -3,6 +3,9 @@ import { processBatch }    from '../functions/_lib/scan-engine.js';
 import { sendReportEmail } from './email.js';
 import { generateReport }  from '../functions/_lib/report.js';
 import { generateId }      from '../functions/_lib/constants.js';
+import { deleteMonitoredSite } from '../functions/_lib/monitored-sites.js';
+import { ENTITLEMENT_SQL, monitoringAllowed } from '../functions/_lib/entitlements.js';
+import { acquireBillingLock } from '../functions/_lib/billing-lock.js';
 
 export default {
   async scheduled(event, env, ctx) {
@@ -10,6 +13,7 @@ export default {
       launchDueScans(env),
       enforceGracePeriods(env),
       cleanupStuckScans(env),
+      env.DB.prepare('DELETE FROM request_limits WHERE window_start < unixepoch() - 3600').run(),
     ]));
   },
 
@@ -59,8 +63,9 @@ async function releaseSite(env, siteId, status, errorMsg = null, scanId = null) 
 async function launchDueScans(env) {
   const now = Math.floor(Date.now() / 1000);
   const due = await env.DB.prepare(
-    `SELECT id, url, base_domain FROM monitored_sites
-     WHERE next_scan_at <= ? AND pending_scan_id IS NULL AND paused = 0 LIMIT 100`
+    `SELECT ms.id, ms.url, ms.base_domain FROM monitored_sites ms
+     LEFT JOIN user_subscriptions us ON us.user_id = ms.user_id
+     WHERE ms.next_scan_at <= ? AND ms.pending_scan_id IS NULL AND ms.paused = 0 AND ${ENTITLEMENT_SQL} LIMIT 100`
   ).bind(now).all();
 
   for (const site of due.results) {
@@ -89,7 +94,7 @@ async function launchDueScans(env) {
     try {
       await bootstrapScan(env, scanId, site.url, site.base_domain, site.id);
     } catch (err) {
-      console.error(`Bootstrap failed for ${site.url}:`, err);
+      console.error('Monitoring bootstrap failed', err.code || err.name);
       await releaseSite(env, site.id, 'failed', `Bootstrap error: ${err.message}`);
       continue;
     }
@@ -138,7 +143,7 @@ async function runScan(env, msg) {
     msg.ack();
 
   } catch (err) {
-    console.error(`Scan error [${scanId}]:`, err);
+    console.error('Monitoring scan failed', err.code || err.name);
     // Unexpected errors use retry so failed messages land in the DLQ after 100 attempts
     msg.retry({ delaySeconds: 10 });
   }
@@ -153,35 +158,26 @@ async function enforceGracePeriods(env) {
   const now = Math.floor(Date.now() / 1000);
 
   // Find users past their grace period deadline
-  const expired = await env.DB.prepare(
-    `SELECT user_id, payment_failed_at FROM user_subscriptions
-     WHERE grace_period_ends_at IS NOT NULL
-       AND grace_period_ends_at < ?
-       AND status = 'grace_period'`
-  ).bind(now).all();
+  const expired = await env.DB.prepare(`SELECT user_id FROM user_subscriptions
+    WHERE status IN ('grace_period', 'cancelled', 'suspended')`).all();
 
   for (const row of (expired.results || [])) {
-    // Pause all their sites
-    await env.DB.prepare(
-      `UPDATE monitored_sites SET paused = 1 WHERE user_id = ? AND paused = 0`
-    ).bind(row.user_id).run();
-
-    await env.DB.prepare(
-      `UPDATE user_subscriptions SET status = 'suspended', updated_at = ? WHERE user_id = ?`
-    ).bind(now, row.user_id).run();
-  }
-
-  // Delete sites + subscription for users who have been suspended for 30+ days
-  const deletable = await env.DB.prepare(
-    `SELECT user_id FROM user_subscriptions
-     WHERE status IN ('suspended', 'cancelled')
-       AND payment_failed_at IS NOT NULL
-       AND payment_failed_at < ?`
-  ).bind(now - 30 * 86400).all();
-
-  for (const row of (deletable.results || [])) {
-    await env.DB.prepare(`DELETE FROM monitored_sites WHERE user_id = ?`).bind(row.user_id).run();
-    await env.DB.prepare(`DELETE FROM user_subscriptions WHERE user_id = ?`).bind(row.user_id).run();
+    const release = await acquireBillingLock(env.DB, row.user_id);
+    if (!release) continue;
+    try {
+      const sub = await env.DB.prepare('SELECT * FROM user_subscriptions WHERE user_id = ?').bind(row.user_id).first();
+      if (!sub || sub.status === 'active') continue;
+      if (!sub.grace_period_ends_at || sub.grace_period_ends_at <= now) {
+        await env.DB.prepare('UPDATE monitored_sites SET paused = 1 WHERE user_id = ?').bind(row.user_id).run();
+        if (sub.status === 'grace_period') await env.DB.prepare("UPDATE user_subscriptions SET status = 'suspended', updated_at = ? WHERE user_id = ?").bind(now, row.user_id).run();
+      }
+      const inactiveSince = sub.payment_failed_at || (sub.grace_period_ends_at ? sub.grace_period_ends_at - 3 * 86400 : null);
+      if (inactiveSince !== null && inactiveSince < now - 30 * 86400) {
+        const sites = await env.DB.prepare('SELECT id FROM monitored_sites WHERE user_id = ?').bind(row.user_id).all();
+        for (const site of sites.results) await deleteMonitoredSite(env.DB, site.id, { userId: row.user_id });
+        await env.DB.prepare('DELETE FROM user_subscriptions WHERE user_id = ?').bind(row.user_id).run();
+      }
+    } finally { await release(); }
   }
 }
 
@@ -210,12 +206,22 @@ async function onScanComplete(env, msg, scanId, siteId) {
   // Generate report with live suppression overlay (siteId ensures suppressions apply to email)
   const report = await generateReport(env, scanId, null, null, null, siteId);
   const site   = await env.DB.prepare(`SELECT * FROM monitored_sites WHERE id = ?`).bind(siteId).first();
+  // Removal during a scan retains its report, but ends monitoring and email delivery.
+  if (!site) {
+    msg.ack();
+    return;
+  }
+  if (!await monitoringAllowed(env.DB, siteId)) {
+    await releaseSite(env, siteId, 'failed', 'Monitoring subscription inactive');
+    msg.ack();
+    return;
+  }
 
   // Email failure is logged but never blocks schedule advancement
   try {
     await sendReportEmail(env, site, report);
   } catch (err) {
-    console.error(`Email failed for site ${siteId}:`, err);
+    console.error('Monitoring email failed', err.code || err.name);
   }
 
   await releaseSite(env, siteId, 'success', null, scanId);

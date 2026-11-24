@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getScanStatus } from '../lib/api.js';
 import { shortUrl } from '../lib/format.js';
+import { useAuth0 } from '@auth0/auth0-react';
+import { useAdmin } from '../lib/admin-context.jsx';
 
 function statusColor(code) {
   if (code === null || code === undefined) return 'text-slate-400';
@@ -19,6 +21,8 @@ function typeLabel(type) {
 export default function ScanProgress() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isLoading, isAuthenticated, getAccessTokenSilently } = useAuth0();
+  const [adminKey] = useAdmin();
   const [status, setStatus] = useState(null);
   const [error, setError] = useState('');
   const intervalRef = useRef(null);
@@ -27,13 +31,17 @@ export default function ScanProgress() {
   const [dots, setDots] = useState('');
 
   useEffect(() => {
+    if (isLoading) return;
     let active = true;
+    setStatus(null);
+    setError('');
 
     async function poll() {
       if (pollingRef.current) return;
       pollingRef.current = true;
       try {
-        const data = await getScanStatus(id);
+        const bearer = adminKey || (isAuthenticated ? await getAccessTokenSilently() : null);
+        const data = await getScanStatus(id, bearer);
         if (!active) return;
         setStatus(data);
 
@@ -66,7 +74,7 @@ export default function ScanProgress() {
       clearInterval(intervalRef.current);
       clearInterval(dotTimer);
     };
-  }, [id, navigate]);
+  }, [id, navigate, isLoading, isAuthenticated, getAccessTokenSilently, adminKey]);
 
   const currentStep = status?.currentStep || 'Starting scan';
   const recentChecks = status?.recentChecks || [];

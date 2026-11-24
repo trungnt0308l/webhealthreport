@@ -1,3 +1,4 @@
+import { parseJson } from '../../_lib/request.js';
 /**
  * PATCH  /api/monitored-sites/:id — update emails for a monitored site (admin)
  * DELETE /api/monitored-sites/:id — remove a monitored site (admin)
@@ -5,6 +6,7 @@
 import { adminAuthCheck } from '../../_lib/monitor-auth.js';
 import { corsJson, corsOptions } from '../../_lib/response.js';
 import { EMAIL_RE } from '../../_lib/constants.js';
+import { deleteMonitoredSite } from '../../_lib/monitored-sites.js';
 
 const json = corsJson;
 
@@ -17,7 +19,7 @@ export async function onRequestPatch({ params, request, env }) {
   if (denied) return denied;
 
   let body;
-  try { body = await request.json(); } catch { return json(request, env, { error: 'Invalid JSON' }, 400); }
+  try { body = await parseJson(request); } catch { return json(request, env, { error: 'Invalid JSON' }, 400); }
 
   const emails = body.emails;
   if (!Array.isArray(emails) || emails.length === 0) return json(request, env, { error: 'emails must be a non-empty array' }, 400);
@@ -38,11 +40,7 @@ export async function onRequestDelete({ params, request, env }) {
   if (denied) return denied;
 
   const { id } = params;
-  const result = await env.DB.prepare(
-    'DELETE FROM monitored_sites WHERE id = ?'
-  ).bind(id).run();
-
-  if (result.meta.changes === 0) {
+  if (!await deleteMonitoredSite(env.DB, id)) {
     return json(request, env, { error: 'Site not found' }, 404);
   }
 

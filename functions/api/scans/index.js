@@ -1,3 +1,5 @@
+import { siteUrl } from '../../_lib/network.js';
+import { parseJson } from '../../_lib/request.js';
 /**
  * POST /api/scans
  * Creates a new scan, fetches homepage, populates crawl queue.
@@ -6,18 +8,18 @@ import { normalizeUrl, getBaseDomain } from '../../_lib/crawl.js';
 import { bootstrapScan } from '../../_lib/scan-bootstrap.js';
 import { corsJson, corsOptions } from '../../_lib/response.js';
 import { generateId } from '../../_lib/constants.js';
+import { serviceFetch } from '../../_lib/network.js';
+import { trustedOrigin } from '../../_lib/request.js';
 
 async function verifyTurnstile(token, env) {
-  // If no secret configured (local dev without test key), skip verification
-  if (!env.TURNSTILE_SECRET_KEY) return true;
-  if (!token) return false;
-  const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+  if (!env.TURNSTILE_SECRET_KEY || typeof token !== 'string' || !token || token.length > 4096) return false;
+  const res = await serviceFetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ secret: env.TURNSTILE_SECRET_KEY, response: token }),
-  });
+  }, { hosts: ['challenges.cloudflare.com'], limit: 16384 });
   const data = await res.json();
-  return data.success === true;
+  return data.success === true && data.hostname === new URL(env.ALLOWED_ORIGIN || 'https://webhealthreport.pages.dev').hostname;
 }
 
 export function onRequestOptions({ request, env }) {
@@ -25,9 +27,10 @@ export function onRequestOptions({ request, env }) {
 }
 
 export async function onRequestPost({ request, env }) {
+  if (!trustedOrigin(request, env)) return corsJson(request, env, { error: 'Forbidden origin' }, 403);
   let body;
   try {
-    body = await request.json();
+    body = await parseJson(request);
   } catch {
     return corsJson(request, env, { error: 'Invalid JSON' }, 400);
   }
@@ -37,14 +40,15 @@ export async function onRequestPost({ request, env }) {
     return corsJson(request, env, { error: 'url is required' }, 400);
   }
 
-  const humanVerified = await verifyTurnstile(turnstileToken, env);
+  let humanVerified = false;
+  try { humanVerified = await verifyTurnstile(turnstileToken, env); } catch { /* Fail closed. */ }
   if (!humanVerified) {
     return corsJson(request, env, { error: 'Security check failed. Please try again.' }, 403);
   }
 
   let startUrl;
   try {
-    startUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    startUrl = siteUrl(rawUrl);
     new URL(startUrl);
   } catch {
     return corsJson(request, env, { error: 'Invalid URL' }, 400);

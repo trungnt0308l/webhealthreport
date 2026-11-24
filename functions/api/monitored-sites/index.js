@@ -1,3 +1,5 @@
+import { siteUrl } from '../../_lib/network.js';
+import { parseJson } from '../../_lib/request.js';
 /**
  * GET  /api/monitored-sites — list all monitored sites (admin)
  * POST /api/monitored-sites — add a site (admin)
@@ -36,7 +38,7 @@ export async function onRequestPost({ request, env }) {
 
   let body;
   try {
-    body = await request.json();
+    body = await parseJson(request);
   } catch {
     return json(request, env, { error: 'Invalid JSON' }, 400);
   }
@@ -50,7 +52,7 @@ export async function onRequestPost({ request, env }) {
 
   let startUrl;
   try {
-    startUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    startUrl = siteUrl(rawUrl);
     new URL(startUrl);
   } catch {
     return json(request, env, { error: 'Invalid URL' }, 400);

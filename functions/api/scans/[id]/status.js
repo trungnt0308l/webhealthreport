@@ -4,11 +4,12 @@
  */
 import { processBatch } from '../../../_lib/scan-engine.js';
 import { corsJson } from '../../../_lib/response.js';
+import { accessibleScan } from '../../../_lib/scan-access.js';
 
 export async function onRequestGet({ params, request, env }) {
   const { id: scanId } = params;
 
-  const scan = await env.DB.prepare('SELECT * FROM scans WHERE id = ?').bind(scanId).first();
+  const scan = await accessibleScan(request, env, scanId);
   if (!scan) {
     return corsJson(request, env, { error: 'Scan not found' }, 404);
   }

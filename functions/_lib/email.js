@@ -1,10 +1,11 @@
+import { serviceFetch } from './network.js';
 /**
  * Email helpers for one-off report sends via Resend API.
  * The weekly scheduler has its own copy in scheduler/email.js.
  */
 
 export async function sendOneOffReportEmail(env, toEmail, report) {
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await serviceFetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${env.RESEND_API_KEY}`,
@@ -16,8 +17,8 @@ export async function sendOneOffReportEmail(env, toEmail, report) {
       subject: `[${report.grade}] ${report.baseDomain} — website health report`,
       html: buildEmailHtml(report),
     }),
-  });
-  if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
+  }, { hosts: ['api.resend.com'] });
+  if (!res.ok) throw new Error(`Resend ${res.status}`);
 }
 
 function buildEmailHtml(report) {
